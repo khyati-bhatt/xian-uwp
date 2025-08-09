@@ -4,15 +4,16 @@ Xian Desktop Wallet
 Professional desktop wallet with universal protocol server
 """
 
-import threading
 import logging
-from datetime import datetime
-from typing import Optional
+import threading
 import flet as ft
 
 from protocol.server import WalletProtocolServer
 from protocol.models import WalletType, PendingRequest
 from protocol.client import XianWalletClientSync
+
+from datetime import datetime
+from typing import Optional
 
 
 logger = logging.getLogger(__name__)

@@ -10,14 +10,15 @@ import hashlib
 import json
 import logging
 import sys
-from pathlib import Path
-from typing import Optional
-
-from xian_py.wallet import Wallet, HDWallet
 
 # Import our protocol components
 from protocol.server import WalletProtocolServer
 from protocol.models import WalletType, ProtocolConfig
+
+from xian_py.wallet import Wallet, HDWallet
+
+from pathlib import Path
+from typing import Optional
 
 
 # Configure logging

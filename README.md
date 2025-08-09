@@ -7,18 +7,18 @@ The Xian Universal Wallet Protocol provides a **unified interface** for all wall
 ## Universal Protocol Architecture
 
 ```
-┌─────────────────┐    HTTP API     ┌─────────────────┐
-│   Any DApp      │ ◄─────────────► │  Any Wallet     │
-│ (Python, JS,    │  localhost:8545 │ (Desktop, Web,  │
-│  etc.)          │                 │  CLI)           │
-└─────────────────┘                 └─────────────────┘
-         │                                   │
-         │                                   │
-         ▼                                   ▼
-┌─────────────────┐                 ┌─────────────────┐
-│ Universal       │                 │ Protocol Server │
-│ Client Library  │                 │ (Port 8545)     │
-└─────────────────┘                 └─────────────────┘
+┌─────────────────┐    HTTP API      ┌─────────────────┐
+│   Any DApp      │ ◄──────────────► │  Any Wallet     │
+│ (Python, JS,    │  localhost:8545  │ (Desktop, Web,  │
+│  etc.)          │                  │  CLI)           │
+└─────────────────┘                  └─────────────────┘
+         │                                    │
+         │                                    │
+         ▼                                    ▼
+┌─────────────────┐                  ┌─────────────────┐
+│ Universal       │                  │ Protocol Server │
+│ Client Library  │                  │ (Port 8545)     │
+└─────────────────┘                  └─────────────────┘
 ```
 
 ### Key Benefits

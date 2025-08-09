@@ -8,6 +8,8 @@ import asyncio
 import hashlib
 import secrets
 import logging
+import uvicorn
+
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set
 from contextlib import asynccontextmanager
@@ -15,7 +17,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import uvicorn
 
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian

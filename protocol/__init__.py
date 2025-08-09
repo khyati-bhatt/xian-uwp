@@ -35,6 +35,7 @@ from .models import (
 )
 
 from .server import WalletProtocolServer
+
 from .client import (
     XianWalletClient,
     XianWalletClientSync,

@@ -7,9 +7,10 @@ Universal client library for connecting to any Xian wallet
 import asyncio
 import time
 import logging
-from typing import Dict, Any, Optional, List, Union
 import httpx
 import websockets
+
+from typing import Dict, Any, Optional, List, Union
 
 from .models import (
     ConnectionStatus, Permission, ProtocolConfig, Endpoints, ErrorCodes,
