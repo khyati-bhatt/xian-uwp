@@ -1,0 +1,462 @@
+# protocol/server.py
+"""
+Xian Wallet Protocol Server
+Universal HTTP API server for all wallet implementations
+"""
+
+import asyncio
+import hashlib
+import secrets
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, Optional, Any, Set
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import uvicorn
+
+from xian_py.wallet import Wallet
+from xian_py.xian import Xian
+from xian_py.transaction import simulate_tx, get_nonce, create_tx, broadcast_tx_sync
+
+from .models import (
+    WalletType, Permission, ProtocolConfig, Endpoints, ErrorCodes,
+    AuthorizationRequest, TransactionRequest, SignMessageRequest, AddTokenRequest, UnlockRequest,
+    WalletInfo, BalanceResponse, TransactionResult, SignatureResponse, 
+    AuthorizationResponse, StatusResponse,
+    Session, PendingRequest
+)
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class WalletProtocolServer:
+    """Universal Wallet Protocol Server"""
+    
+    def __init__(self, wallet_type: WalletType = WalletType.DESKTOP):
+        self.wallet_type = wallet_type
+        self.wallet: Optional[Wallet] = None
+        self.xian_client: Optional[Xian] = None
+        self.is_locked = True
+        self.password_hash: Optional[str] = None
+        
+        # Network configuration
+        self.network_url = "https://testnet.xian.org"
+        self.chain_id = "xian-testnet"
+        
+        # Session management
+        self.sessions: Dict[str, Session] = {}
+        self.pending_requests: Dict[str, PendingRequest] = {}
+        self.websocket_connections: Set[WebSocket] = set()
+        
+        # Cache and activity tracking
+        self.cache: Dict[str, tuple] = {}  # (data, timestamp)
+        self.last_activity = datetime.now()
+        
+        # Initialize FastAPI app
+        self.app = self._create_app()
+    
+    def _create_app(self) -> FastAPI:
+        """Create and configure FastAPI application"""
+        
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            logger.info("🚀 Xian Wallet Protocol Server starting...")
+            # Initialize demo wallet
+            await self._initialize_demo_wallet()
+            # Start background tasks
+            asyncio.create_task(self._cleanup_task())
+            yield
+            logger.info("💤 Xian Wallet Protocol Server shutting down...")
+        
+        app = FastAPI(
+            title="Xian Wallet Protocol Server",
+            description="Universal HTTP API for Xian wallet operations",
+            version=ProtocolConfig.PROTOCOL_VERSION,
+            lifespan=lifespan
+        )
+        
+        # CORS middleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],  # In production: specify exact origins
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
+        # Register routes
+        self._register_routes(app)
+        
+        return app
+    
+    def _register_routes(self, app: FastAPI):
+        """Register API routes"""
+        security = HTTPBearer()
+        
+        # Helper functions
+        def verify_session(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Session:
+            """Verify and return session"""
+            token = credentials.credentials
+            session = self.sessions.get(token)
+            
+            if not session:
+                raise HTTPException(status_code=401, detail=ErrorCodes.UNAUTHORIZED)
+            
+            if datetime.now() > session.expires_at:
+                del self.sessions[token]
+                raise HTTPException(status_code=401, detail=ErrorCodes.SESSION_EXPIRED)
+            
+            # Update activity
+            session.last_activity = datetime.now()
+            self.last_activity = datetime.now()
+            return session
+        
+        def require_permission(permission: Permission):
+            """Decorator to require specific permission"""
+            def wrapper(session: Session = Depends(verify_session)):
+                if permission not in session.permissions:
+                    raise HTTPException(status_code=403, detail="Insufficient permissions")
+                return session
+            return wrapper
+        
+        def check_wallet_unlocked():
+            """Check if wallet is unlocked"""
+            if self.is_locked:
+                raise HTTPException(status_code=423, detail=ErrorCodes.WALLET_LOCKED)
+            if not self.wallet:
+                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
+        
+        # Status endpoint (no auth required)
+        @app.get(Endpoints.WALLET_STATUS, response_model=StatusResponse)
+        async def get_wallet_status():
+            """Get wallet status"""
+            return StatusResponse(
+                available=self.wallet is not None,
+                locked=self.is_locked,
+                wallet_type=self.wallet_type,
+                network=self.network_url,
+                chain_id=self.chain_id,
+                version=ProtocolConfig.PROTOCOL_VERSION
+            )
+        
+        # Authorization endpoints
+        @app.post(Endpoints.AUTH_REQUEST)
+        async def request_authorization(request: AuthorizationRequest, background_tasks: BackgroundTasks):
+            """Request DApp authorization"""
+            request_id = secrets.token_urlsafe(16)
+            
+            pending_request = PendingRequest(
+                request_id=request_id,
+                app_name=request.app_name,
+                app_url=request.app_url,
+                permissions=request.permissions,
+                description=request.description,
+                created_at=datetime.now()
+            )
+            
+            self.pending_requests[request_id] = pending_request
+            
+            # Notify wallet UI via WebSocket
+            await self._broadcast_to_wallet({
+                "type": "authorization_request",
+                "request": pending_request.dict()
+            })
+            
+            # Auto-cleanup after 5 minutes
+            background_tasks.add_task(self._cleanup_request, request_id)
+            
+            return {"request_id": request_id, "status": "pending"}
+        
+        @app.post(Endpoints.AUTH_APPROVE.replace("{request_id}", "{request_id}"))
+        async def approve_authorization(request_id: str):
+            """Approve authorization request"""
+            pending_request = self.pending_requests.get(request_id)
+            if not pending_request:
+                raise HTTPException(status_code=404, detail="Request not found")
+            
+            # Create session
+            session_token = secrets.token_urlsafe(32)
+            expires_at = datetime.now() + timedelta(minutes=ProtocolConfig.SESSION_TIMEOUT_MINUTES)
+            
+            session = Session(
+                token=session_token,
+                app_name=pending_request.app_name,
+                app_url=pending_request.app_url,
+                permissions=pending_request.permissions,
+                created_at=datetime.now(),
+                expires_at=expires_at,
+                last_activity=datetime.now()
+            )
+            
+            self.sessions[session_token] = session
+            del self.pending_requests[request_id]
+            
+            return AuthorizationResponse(
+                session_token=session_token,
+                expires_at=expires_at,
+                permissions=pending_request.permissions
+            )
+        
+        @app.post(Endpoints.AUTH_DENY.replace("{request_id}", "{request_id}"))
+        async def deny_authorization(request_id: str):
+            """Deny authorization request"""
+            if request_id in self.pending_requests:
+                del self.pending_requests[request_id]
+            return {"status": "denied"}
+        
+        # Wallet endpoints
+        @app.get(Endpoints.WALLET_INFO, response_model=WalletInfo)
+        async def get_wallet_info(_: Session = Depends(require_permission(Permission.WALLET_INFO))):
+            """Get wallet information"""
+            check_wallet_unlocked()
+            
+            cache_key = "wallet_info"
+            cached_data = self._get_cached(cache_key, ttl_seconds=60)
+            
+            if cached_data:
+                return cached_data
+            
+            wallet_info = WalletInfo(
+                address=self.wallet.public_key,
+                truncated_address=f"{self.wallet.public_key[:8]}...{self.wallet.public_key[-8:]}",
+                locked=self.is_locked,
+                chain_id=self.chain_id,
+                network=self.network_url,
+                wallet_type=self.wallet_type
+            )
+            
+            self._set_cache(cache_key, wallet_info)
+            return wallet_info
+        
+        @app.post(Endpoints.WALLET_UNLOCK)
+        async def unlock_wallet(request: UnlockRequest):
+            """Unlock wallet"""
+            if not self.password_hash:
+                raise HTTPException(status_code=400, detail="No password set")
+            
+            password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+            if password_hash != self.password_hash:
+                raise HTTPException(status_code=401, detail="Invalid password")
+            
+            self.is_locked = False
+            self.last_activity = datetime.now()
+            self._clear_cache()
+            
+            return {"status": "unlocked"}
+        
+        @app.post(Endpoints.WALLET_LOCK)
+        async def lock_wallet():
+            """Lock wallet"""
+            self.is_locked = True
+            self._clear_cache()
+            return {"status": "locked"}
+        
+        # Balance endpoints
+        @app.get(Endpoints.BALANCE.replace("{contract}", "{contract}"), response_model=BalanceResponse)
+        async def get_balance(contract: str, _: Session = Depends(require_permission(Permission.BALANCE))):
+            """Get token balance"""
+            check_wallet_unlocked()
+            
+            cache_key = f"balance_{contract}_{self.wallet.public_key}"
+            cached_data = self._get_cached(cache_key, ttl_seconds=10)
+            
+            if cached_data:
+                return cached_data
+            
+            try:
+                balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
+                response = BalanceResponse(balance=balance, contract=contract)
+                self._set_cache(cache_key, response)
+                return response
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        
+        # Transaction endpoints
+        @app.post(Endpoints.TRANSACTION, response_model=TransactionResult)
+        async def send_transaction(request: TransactionRequest, _: Session = Depends(require_permission(Permission.TRANSACTIONS))):
+            """Send transaction"""
+            check_wallet_unlocked()
+            
+            try:
+                nonce = get_nonce(self.network_url, self.wallet.public_key)
+                
+                payload = {
+                    "chain_id": self.chain_id,
+                    "contract": request.contract,
+                    "function": request.function,
+                    "kwargs": request.kwargs,
+                    "nonce": nonce,
+                    "sender": self.wallet.public_key,
+                    "stamps_supplied": request.stamps_supplied or 0
+                }
+                
+                # Estimate stamps if not provided
+                if not request.stamps_supplied:
+                    simulated = simulate_tx(self.network_url, payload)
+                    payload["stamps_supplied"] = simulated.get("stamps_used", 50000)
+                
+                # Create and broadcast transaction
+                tx = create_tx(payload, self.wallet)
+                result = broadcast_tx_sync(self.network_url, tx)
+                
+                # Clear balance cache after transaction
+                self._clear_cache_pattern("balance_")
+                
+                return TransactionResult(
+                    success=True,
+                    transaction_hash=tx.get("hash"),
+                    result=result,
+                    gas_used=payload["stamps_supplied"]
+                )
+            except Exception as e:
+                return TransactionResult(
+                    success=False,
+                    errors=[str(e)]
+                )
+        
+        @app.post(Endpoints.SIGN_MESSAGE, response_model=SignatureResponse)
+        async def sign_message(request: SignMessageRequest, _: Session = Depends(require_permission(Permission.SIGN_MESSAGE))):
+            """Sign message"""
+            check_wallet_unlocked()
+            
+            try:
+                signature = self.wallet.sign_msg(request.message)
+                return SignatureResponse(
+                    signature=signature,
+                    message=request.message,
+                    address=self.wallet.public_key
+                )
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        
+        # Token management
+        @app.post(Endpoints.ADD_TOKEN)
+        async def add_token(request: AddTokenRequest, _: Session = Depends(require_permission(Permission.ADD_TOKEN))):
+            """Add token to wallet"""
+            # In full implementation, this would add to wallet's token list
+            return {"accepted": True, "contract": request.contract_address}
+        
+        # WebSocket endpoint
+        @app.websocket(Endpoints.WEBSOCKET)
+        async def websocket_endpoint(websocket: WebSocket):
+            """WebSocket for real-time communication"""
+            await websocket.accept()
+            self.websocket_connections.add(websocket)
+            
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    # Handle ping/pong
+                    if data == '{"type":"ping"}':
+                        await websocket.send_text('{"type":"pong"}')
+            except WebSocketDisconnect:
+                self.websocket_connections.discard(websocket)
+    
+    # Cache management
+    def _get_cached(self, key: str, ttl_seconds: int) -> Optional[Any]:
+        """Get cached data if still valid"""
+        if key not in self.cache:
+            return None
+        
+        data, timestamp = self.cache[key]
+        if (datetime.now() - timestamp).total_seconds() > ttl_seconds:
+            del self.cache[key]
+            return None
+        
+        return data
+    
+    def _set_cache(self, key: str, data: Any):
+        """Set cache data"""
+        self.cache[key] = (data, datetime.now())
+    
+    def _clear_cache(self):
+        """Clear all cache"""
+        self.cache.clear()
+    
+    def _clear_cache_pattern(self, pattern: str):
+        """Clear cache entries matching pattern"""
+        keys_to_delete = [k for k in self.cache.keys() if pattern in k]
+        for key in keys_to_delete:
+            del self.cache[key]
+    
+    # WebSocket helpers
+    async def _broadcast_to_wallet(self, message: dict):
+        """Broadcast message to wallet UI"""
+        if self.websocket_connections:
+            disconnected = set()
+            for websocket in self.websocket_connections:
+                try:
+                    await websocket.send_text(str(message))
+                except:
+                    disconnected.add(websocket)
+            
+            # Remove disconnected websockets
+            self.websocket_connections -= disconnected
+    
+    # Background tasks
+    async def _cleanup_task(self):
+        """Background cleanup task"""
+        while True:
+            await asyncio.sleep(60)  # Run every minute
+            
+            # Clean expired sessions
+            now = datetime.now()
+            expired_tokens = [
+                token for token, session in self.sessions.items()
+                if now > session.expires_at
+            ]
+            for token in expired_tokens:
+                del self.sessions[token]
+            
+            # Clean old pending requests
+            expired_requests = [
+                req_id for req_id, request in self.pending_requests.items()
+                if (now - request.created_at).total_seconds() > 300  # 5 minutes
+            ]
+            for req_id in expired_requests:
+                del self.pending_requests[req_id]
+            
+            # Auto-lock on inactivity
+            if not self.is_locked and self.last_activity:
+                inactive_time = now - self.last_activity
+                if inactive_time.total_seconds() > ProtocolConfig.AUTO_LOCK_MINUTES * 60:
+                    self.is_locked = True
+                    self._clear_cache()
+                    logger.info("Wallet auto-locked due to inactivity")
+    
+    async def _cleanup_request(self, request_id: str):
+        """Cleanup specific request after timeout"""
+        await asyncio.sleep(300)  # 5 minutes
+        self.pending_requests.pop(request_id, None)
+    
+    # Initialization
+    async def _initialize_demo_wallet(self):
+        """Initialize demo wallet for development"""
+        try:
+            self.wallet = Wallet()
+            self.xian_client = Xian(self.network_url, wallet=self.wallet)
+            self.password_hash = hashlib.sha256("demo_password".encode()).hexdigest()
+            logger.info(f"📍 Demo wallet initialized: {self.wallet.public_key}")
+        except Exception as e:
+            logger.error(f"Failed to initialize wallet: {e}")
+    
+    def run(self, host: str = ProtocolConfig.DEFAULT_HOST, port: int = ProtocolConfig.DEFAULT_PORT):
+        """Run the server"""
+        logger.info(f"🌐 Starting server on {host}:{port}")
+        uvicorn.run(self.app, host=host, port=port, log_level="info")
+
+
+def create_server(wallet_type: WalletType = WalletType.DESKTOP) -> WalletProtocolServer:
+    """Factory function to create server instance"""
+    return WalletProtocolServer(wallet_type=wallet_type)
+
+
+if __name__ == "__main__":
+    server = create_server()
+    server.run()
