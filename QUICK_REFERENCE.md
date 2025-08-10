@@ -50,7 +50,7 @@ client.connect()  # Works with desktop, CLI, or web wallets
 from protocol import WalletProtocolServer, WalletType
 server = WalletProtocolServer(WalletType.DESKTOP)
 server.wallet = your_wallet
-server.run(port=8545)
+server.run()  # Same for all wallet types: localhost:8545
 
 # Web Wallet (Flet-based)
 from protocol import WalletProtocolServer, WalletType

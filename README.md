@@ -74,8 +74,8 @@ server.wallet = your_wallet_instance
 server.password_hash = your_password_hash
 server.is_locked = False
 
-# Run server (usually in background thread)
-server.run(host="127.0.0.1", port=8545)
+# Run server (same config for all wallet types)
+server.run()  # Uses defaults: host="127.0.0.1", port=8545
 ```
 
 **Key Implementation Points:**
@@ -106,10 +106,10 @@ class CLIWalletDaemon:
         # Load wallet from encrypted file
         wallet = self.load_wallet(password)
         
-        # Create and start server
+        # Create and start server (same config for all wallet types)
         server = WalletProtocolServer(wallet_type=WalletType.CLI)
         server.wallet = wallet
-        server.run()
+        server.run()  # Uses defaults: host="127.0.0.1", port=8545
 ```
 
 **Key Implementation Points:**
@@ -135,11 +135,11 @@ server.wallet = your_wallet_instance
 server.password_hash = your_password_hash
 server.is_locked = False
 
-# Run server in background thread
+# Run server in background thread (same config for all wallet types)
 def run_server():
-    server.run(host="127.0.0.1", port=8545)
+    server.run()  # Uses defaults: host="127.0.0.1", port=8545
 
-# Run Flet web interface
+# Run Flet web interface on different port
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
 ```
 
@@ -296,19 +296,19 @@ pip install fastapi uvicorn httpx websockets pydantic xian-py
 
 **For Desktop Wallet Development:**
 ```bash
-pip install flet
+pip install flet>=0.21.0
 ```
 
 **For CLI Wallet Development:**
 ```bash
-pip install click
-pip install cryptography  # For encrypted wallet storage
+pip install click>=8.1.0
+pip install cryptography>=41.0.0  # For encrypted wallet storage
 ```
 
 **For Running Examples:**
 ```bash
-pip install flet          # Required for Flet examples
-pip install reflex        # Required for Reflex examples
+pip install flet>=0.21.0  # Required for Flet examples
+pip install reflex>=0.6.0  # Required for Reflex examples
 ```
 
 ### 2. Project Structure
@@ -343,7 +343,7 @@ xian-universal-wallet-protocol/
 
 ```bash
 # Install desktop wallet dependencies
-pip install flet
+pip install flet>=0.21.0
 
 # Run desktop wallet example
 python examples/wallets/desktop.py
@@ -353,7 +353,7 @@ python examples/wallets/desktop.py
 
 ```bash
 # Install web wallet dependencies
-pip install flet
+pip install flet>=0.21.0
 
 # Run web wallet example (opens in browser)
 python examples/wallets/web.py
@@ -363,7 +363,7 @@ python examples/wallets/web.py
 
 ```bash
 # Install CLI wallet dependencies  
-pip install click cryptography
+pip install click>=8.1.0 cryptography>=41.0.0
 
 # Create wallet
 python examples/wallets/cli.py create
@@ -377,7 +377,7 @@ python examples/wallets/cli.py start
 **Flet DApp Example:**
 ```bash
 # Install Flet DApp dependencies
-pip install flet
+pip install flet>=0.21.0
 
 # Run Flet DApp example
 python examples/dapps/universal_dapp.py
@@ -386,7 +386,7 @@ python examples/dapps/universal_dapp.py
 **Reflex DApp Example:**
 ```bash
 # Install Reflex DApp dependencies
-pip install reflex
+pip install reflex>=0.6.0
 
 # Initialize and run Reflex DApp
 cd examples/dapps/
@@ -401,7 +401,7 @@ reflex run
 
 ```python
 # examples/dapps/universal_dapp.py
-# Requires: pip install flet
+# Requires: pip install flet>=0.21.0
 
 from protocol.client import XianWalletClientSync
 
@@ -426,7 +426,7 @@ class MyDApp:
 
 ```python
 # examples/dapps/reflex_dapp.py  
-# Requires: pip install reflex
+# Requires: pip install reflex>=0.6.0
 
 import reflex as rx
 from protocol.client import XianWalletClientSync
@@ -572,8 +572,8 @@ python examples/wallets/cli.py start
 
 ```bash
 # Install example dependencies first
-pip install flet      # For Flet examples
-pip install reflex    # For Reflex examples
+pip install flet>=0.21.0      # For Flet examples
+pip install reflex>=0.6.0     # For Reflex examples
 
 # Run Flet DApp example
 python examples/dapps/universal_dapp.py
