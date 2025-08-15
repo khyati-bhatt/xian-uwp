@@ -4,6 +4,42 @@
 
 The Xian Universal Wallet Protocol provides a **unified interface** for all wallet types (desktop, CLI, web) to communicate with DApps. Every wallet exposes the same HTTP API on `localhost:8545`, making wallet integration **programming language independent** and **wallet type agnostic**.
 
+> **Important**: The default port `8545` was chosen to avoid conflicts with common development servers. If this port is already in use on your system, you can configure a different port when initializing the server.
+
+## Quick Start
+
+### For DApp Developers
+
+```python
+# 1. Install the protocol
+pip install -r requirements.txt
+
+# 2. Connect to any wallet
+from protocol.client import XianWalletClientSync
+
+client = XianWalletClientSync("My DApp")
+client.connect()
+
+# 3. Use the wallet
+info = client.get_wallet_info()
+balance = client.get_balance("currency")
+```
+
+### For Wallet Developers
+
+```python
+# 1. Install the protocol
+pip install -r requirements.txt
+
+# 2. Create protocol server
+from protocol.server import WalletProtocolServer
+from protocol.models import WalletType
+
+server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
+server.wallet = your_wallet_instance
+server.run()  # Starts on localhost:8545
+```
+
 ## Universal Protocol Architecture
 
 ```
@@ -76,6 +112,9 @@ server.is_locked = False
 
 # Run server (same config for all wallet types)
 server.run()  # Uses defaults: host="127.0.0.1", port=8545
+
+# Or with custom port if 8545 is in use
+server.run(port=8546)
 ```
 
 **Key Implementation Points:**
@@ -162,16 +201,18 @@ from protocol.client import XianWalletClientSync
 # Create client - works with any wallet type
 client = XianWalletClientSync(
     app_name="My DApp", 
-    app_url="http://localhost:8080"
+    app_url="http://localhost:8080",
+    server_url="http://localhost:8545"  # Optional: custom port
 )
 
 # Connect to any wallet
-client.connect()
-
-# Use identical API regardless of wallet type
-wallet_info = client.get_wallet_info()
-balance = client.get_balance("currency")
-result = client.send_transaction("currency", "transfer", {"to": "addr", "amount": 100})
+if client.connect():
+    # Use identical API regardless of wallet type
+    wallet_info = client.get_wallet_info()
+    balance = client.get_balance("currency")
+    result = client.send_transaction("currency", "transfer", {"to": "addr", "amount": 100})
+else:
+    print("Failed to connect to wallet")
 ```
 
 ### Legacy Compatibility
@@ -190,6 +231,9 @@ const balance = await XianWalletUtils.getBalance("currency");
 ### Core Endpoints
 
 #### GET /api/v1/wallet/status
+Check if wallet is available and its current state. No authentication required.
+
+**Response:**
 ```json
 {
   "available": true,
@@ -202,15 +246,26 @@ const balance = await XianWalletUtils.getBalance("currency");
 ```
 
 #### POST /api/v1/auth/request
+Request authorization from the wallet. The wallet will prompt the user to approve/deny.
+
+**Request Body:**
 ```json
 {
   "app_name": "My DApp",
   "app_url": "http://localhost:8080", 
-  "permissions": ["wallet_info", "balance", "transactions"]
+  "permissions": ["wallet_info", "balance", "transactions"],
+  "description": "Optional description of why permissions are needed"
 }
 ```
 
-Response:
+**Available Permissions:**
+- `wallet_info` - Read wallet address and basic info
+- `balance` - Read token balances
+- `transactions` - Send transactions
+- `sign_message` - Sign messages
+- `add_token` - Add custom tokens to wallet
+
+**Response:**
 ```json
 {
   "request_id": "req_abc123",
@@ -219,6 +274,9 @@ Response:
 ```
 
 #### POST /api/v1/auth/approve/{request_id}
+Approve an authorization request. Usually called by the wallet UI after user approval.
+
+**Response:**
 ```json
 {
   "session_token": "token_xyz789",
@@ -227,9 +285,23 @@ Response:
 }
 ```
 
+#### POST /api/v1/auth/deny/{request_id}
+Deny an authorization request. Usually called by the wallet UI after user denial.
+
+**Response:**
+```json
+{
+  "status": "denied",
+  "reason": "User denied authorization"
+}
+```
+
 #### GET /api/v1/wallet/info
 *Requires Authorization: Bearer {session_token}*
 
+Get wallet information. Requires `wallet_info` permission.
+
+**Response:**
 ```json
 {
   "address": "abc123...",
@@ -239,6 +311,35 @@ Response:
   "network": "https://testnet.xian.org",
   "wallet_type": "desktop",
   "version": "1.0.0"
+}
+```
+
+#### POST /api/v1/wallet/unlock
+Unlock the wallet with password. No authentication required.
+
+**Request Body:**
+```json
+{
+  "password": "wallet_password"
+}
+```
+
+**Response:**
+```json
+{
+  "unlocked": true,
+  "message": "Wallet unlocked successfully"
+}
+```
+
+#### POST /api/v1/wallet/lock
+Lock the wallet. Requires valid session.
+
+**Response:**
+```json
+{
+  "locked": true,
+  "message": "Wallet locked successfully"
 }
 ```
 
@@ -257,6 +358,9 @@ Response:
 #### POST /api/v1/transaction
 *Requires Authorization: Bearer {session_token}*
 
+Send a transaction to the blockchain. Requires `transactions` permission.
+
+**Request Body:**
 ```json
 {
   "contract": "currency",
@@ -266,13 +370,112 @@ Response:
 }
 ```
 
-Response:
+**Response (Success):**
 ```json
 {
   "success": true,
   "transaction_hash": "tx_hash_here",
   "result": "transaction_result",
   "gas_used": 45000
+}
+```
+
+**Response (Failure):**
+```json
+{
+  "success": false,
+  "errors": ["Insufficient balance"],
+  "transaction_hash": null
+}
+```
+
+#### POST /api/v1/sign
+*Requires Authorization: Bearer {session_token}*
+
+Sign a message with the wallet's private key. Requires `sign_message` permission.
+
+**Request Body:**
+```json
+{
+  "message": "Message to sign"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Message to sign",
+  "signature": "signature_hex",
+  "signer": "wallet_address"
+}
+```
+
+#### POST /api/v1/tokens/add
+*Requires Authorization: Bearer {session_token}*
+
+Add a custom token to the wallet. Requires `add_token` permission.
+
+**Request Body:**
+```json
+{
+  "contract_address": "token_contract",
+  "token_name": "My Token",
+  "token_symbol": "MTK"
+}
+```
+
+**Response:**
+```json
+{
+  "accepted": true,
+  "contract": "token_contract"
+}
+```
+
+### WebSocket API
+
+#### WS /ws/v1
+WebSocket endpoint for real-time communication. Useful for wallet UIs and monitoring.
+
+**Connection:**
+```javascript
+const ws = new WebSocket('ws://localhost:8545/ws/v1');
+```
+
+**Message Types:**
+
+**Ping/Pong:**
+```json
+// Send
+{"type": "ping"}
+
+// Receive
+{"type": "pong", "timestamp": "2024-01-01T12:00:00Z"}
+```
+
+**Authorization Request Event:**
+```json
+{
+  "type": "authorization_request",
+  "request": {
+    "request_id": "req_abc123",
+    "app_name": "My DApp",
+    "permissions": ["wallet_info", "balance"],
+    "created_at": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+**Transaction Event:**
+```json
+{
+  "type": "transaction",
+  "data": {
+    "hash": "tx_hash",
+    "status": "pending|success|failed",
+    "contract": "currency",
+    "function": "transfer"
+  }
 }
 ```
 
@@ -332,12 +535,18 @@ xian-universal-wallet-protocol/
 └── README.md
 ```
 
-**Dependency Notes:**
-- `requirements.txt` contains **only core protocol dependencies**
-- Additional dependencies listed above are needed for specific wallet examples
-- All files outside `protocol/` are **examples** to learn from and adapt
-- Web wallet uses Flet for browser-based interface (not browser extension)
-- DApp examples available in both Flet and Reflex frameworks
+**Important Notes:**
+- **Core Protocol**: Only files in `protocol/` directory are the actual protocol implementation
+- **Examples**: All files in `examples/` are reference implementations to learn from
+- **Dependencies**: `requirements.txt` contains only what's needed for the protocol itself
+- **Additional Dependencies**: Each example may require additional packages (noted above)
+
+**Example Files Explained:**
+- `desktop.py` - Shows how to embed the protocol server in a desktop GUI application
+- `web.py` - Demonstrates a browser-based wallet using Flet (100% Python, no JavaScript)
+- `cli.py` - Example of a command-line wallet with daemon mode
+- `universal_dapp.py` - Sample DApp showing wallet integration with Flet UI
+- `reflex_dapp.py` - Sample DApp using the Reflex framework instead of Flet
 
 ### 3. Run Desktop Wallet Example
 
@@ -479,6 +688,54 @@ XianWalletUtils.init().then(() => {
 
 **Note:** Web wallets provide the same localhost:8545 API, so existing JavaScript code works unchanged.
 
+## Configuration Options
+
+### Server Configuration
+
+```python
+from protocol.server import WalletProtocolServer
+from protocol.models import WalletType
+
+# Create server with options
+server = WalletProtocolServer(
+    wallet_type=WalletType.DESKTOP,
+    session_duration=7200,  # 2 hours (default: 3600)
+    auto_lock_minutes=15,   # Auto-lock after 15 min (default: 30)
+    max_sessions=10         # Max concurrent sessions (default: 100)
+)
+
+# Custom network configuration
+server.network = "https://mainnet.xian.org"
+server.chain_id = "xian-mainnet"
+
+# Run on custom port
+server.run(host="127.0.0.1", port=8546)
+```
+
+### Client Configuration
+
+```python
+from protocol.client import XianWalletClientSync
+
+# Create client with options
+client = XianWalletClientSync(
+    app_name="My DApp",
+    app_url="http://localhost:3000",
+    server_url="http://localhost:8546",  # Custom wallet URL/port
+    permissions=["wallet_info", "balance", "transactions"]  # Request specific permissions
+)
+
+# Async client with custom settings
+from protocol.client import XianWalletClient
+
+async_client = XianWalletClient(
+    app_name="My Async DApp",
+    app_url="http://localhost:3000",
+    server_url="http://localhost:8545",
+    permissions=["wallet_info", "balance"]
+)
+```
+
 ## Security Considerations
 
 ### Local-Only Communication
@@ -537,22 +794,60 @@ const balance = await XianWalletUtils.getBalance("currency");
 
 ## Development & Testing
 
-### Start Protocol Server
+### Running the Protocol Server Directly
 
 ```bash
-# Core dependencies only needed
-python protocol/server.py
+# Start a demo server for testing
+python -m protocol.server
+
+# The server will:
+# - Start on localhost:8545
+# - Create a demo wallet automatically
+# - Log the wallet address for testing
+# - Accept connections from DApps
 ```
 
-### Test with Client
+### Testing with the Client
 
 ```python
-# Core dependencies only needed
 from protocol.client import XianWalletClientSync
 
+# Create client
 client = XianWalletClientSync("Test App")
-client.connect(auto_approve=True)  # For testing only
-print(client.get_wallet_info())
+
+# Connect and request authorization
+if client.connect():
+    print("Connected!")
+    
+    # The wallet UI will show authorization request
+    # After approval, you can use the wallet
+    info = client.get_wallet_info()
+    print(f"Wallet: {info.truncated_address}")
+```
+
+### Testing Authorization Flow
+
+```python
+import asyncio
+from protocol.client import XianWalletClient
+
+async def test_auth_flow():
+    client = XianWalletClient("Test DApp")
+    
+    # Request authorization
+    request_id = await client._request_authorization(["wallet_info", "balance"])
+    print(f"Authorization requested: {request_id}")
+    
+    # In a real wallet, user would approve via UI
+    # For testing, you can manually approve:
+    # POST http://localhost:8545/api/v1/auth/approve/{request_id}
+    
+    # Wait for approval
+    session = await client._wait_for_approval(request_id)
+    if session:
+        print(f"Approved! Token: {session.session_token}")
+
+asyncio.run(test_auth_flow())
 ```
 
 ### Test Different Wallet Types
@@ -583,29 +878,134 @@ cd examples/dapps/
 reflex run  # Assuming reflex_dapp.py is set up as Reflex app
 ```
 
+## Error Handling
+
+### HTTP Status Codes
+
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `401` - Unauthorized (missing or invalid token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found (invalid endpoint or resource)
+- `423` - Locked (wallet is locked)
+- `500` - Internal Server Error
+
+### Error Response Format
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+### Common Error Scenarios
+
+**Wallet Locked:**
+```json
+{
+  "detail": "Wallet is locked"
+}
+```
+*Solution: Unlock wallet via `/api/v1/wallet/unlock`*
+
+**Invalid Session:**
+```json
+{
+  "detail": "Invalid or expired session"
+}
+```
+*Solution: Request new authorization*
+
+**Insufficient Permissions:**
+```json
+{
+  "detail": "Insufficient permissions"
+}
+```
+*Solution: Request authorization with required permissions*
+
 ## Troubleshooting
 
 ### Common Issues
 
 **Connection Refused**
 - Ensure wallet server is running on port 8545
+- Check if another service is using port 8545
+- Try a different port: `server.run(port=8546)`
 - Check firewall settings
 
 **Authorization Failed**
 - Verify wallet is unlocked
 - Check authorization request was approved
+- Ensure permissions match what DApp requests
 
 **Session Expired**
 - Tokens expire after 1 hour by default
 - Client will auto-reconnect
+- Can configure longer expiry in server
 
 ### Debug Mode
 
 ```bash
 # Enable debug logging
 export XIAN_WALLET_DEBUG=1
-python wallets/desktop.py
+python examples/wallets/desktop.py
+
+# Or in code
+import logging
+logging.basicConfig(level=logging.DEBUG)
 ```
+
+## Best Practices
+
+### For Wallet Developers
+
+1. **Authorization UI**
+   - Show clear permission requests
+   - Display app name and URL prominently
+   - Allow users to approve/deny individual permissions
+   - Show session duration
+
+2. **Security**
+   - Always validate session tokens
+   - Consider implementing rate limiting
+   - Log authorization attempts
+   - Auto-lock on inactivity (configurable)
+   - Clear sessions on wallet lock
+
+3. **User Experience**
+   - Show pending authorization requests
+   - Notify users of transaction requests
+   - Display clear error messages
+   - Implement transaction confirmation UI
+
+### For DApp Developers
+
+1. **Connection Handling**
+   ```python
+   # Always check connection status
+   if not client.is_connected():
+       client.connect()
+   
+   # Handle connection failures gracefully
+   try:
+       balance = client.get_balance("currency")
+   except ConnectionError:
+       # Show user-friendly error
+       pass
+   ```
+
+2. **Permission Management**
+   - Only request necessary permissions
+   - Explain why permissions are needed
+   - Handle permission denials gracefully
+   - Cache wallet info appropriately
+
+3. **Error Handling**
+   - Catch and handle all exceptions
+   - Show meaningful error messages
+   - Implement retry logic for transient failures
+   - Log errors for debugging
 
 ## Future Enhancements
 
@@ -615,6 +1015,8 @@ python wallets/desktop.py
 - **Browser extension version** of web wallet (optional)
 - **Mobile wallet support** via Flet mobile apps
 - **Cross-platform notifications** for transaction requests
+- **QR code authorization** for mobile/remote wallets
+- **Multi-signature support** for shared wallets
 
 ---
 
