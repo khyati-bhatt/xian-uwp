@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -59,6 +59,9 @@ class WalletProtocolServer:
         self.cache: Dict[str, tuple] = {}  # (data, timestamp)
         self.last_activity = datetime.now()
         
+        # Background task management
+        self.background_tasks: Set[asyncio.Task] = set()
+        
         # Initialize FastAPI app
         self.app = self._create_app()
     
@@ -71,9 +74,19 @@ class WalletProtocolServer:
             # Initialize demo wallet
             await self._initialize_demo_wallet()
             # Start background tasks
-            asyncio.create_task(self._cleanup_task())
+            cleanup_task = asyncio.create_task(self._cleanup_task())
+            self.background_tasks.add(cleanup_task)
+            
             yield
+            
             logger.info("💤 Xian Wallet Protocol Server shutting down...")
+            # Cancel all background tasks gracefully
+            for task in self.background_tasks:
+                task.cancel()
+            
+            # Wait for all tasks to complete cancellation
+            await asyncio.gather(*self.background_tasks, return_exceptions=True)
+            self.background_tasks.clear()
         
         app = FastAPI(
             title="Xian Wallet Protocol Server",
@@ -148,7 +161,7 @@ class WalletProtocolServer:
         
         # Authorization endpoints
         @app.post(Endpoints.AUTH_REQUEST)
-        async def request_authorization(request: AuthorizationRequest, background_tasks: BackgroundTasks):
+        async def request_authorization(request: AuthorizationRequest):
             """Request DApp authorization"""
             request_id = secrets.token_urlsafe(16)
             
@@ -170,7 +183,8 @@ class WalletProtocolServer:
             })
             
             # Auto-cleanup after 5 minutes
-            background_tasks.add_task(self._cleanup_request, request_id)
+            cleanup_task = asyncio.create_task(self._cleanup_request(request_id))
+            self.background_tasks.add(cleanup_task)
             
             return {"request_id": request_id, "status": "pending"}
         
@@ -403,38 +417,49 @@ class WalletProtocolServer:
     # Background tasks
     async def _cleanup_task(self):
         """Background cleanup task"""
-        while True:
-            await asyncio.sleep(60)  # Run every minute
-            
-            # Clean expired sessions
-            now = datetime.now()
-            expired_tokens = [
-                token for token, session in self.sessions.items()
-                if now > session.expires_at
-            ]
-            for token in expired_tokens:
-                del self.sessions[token]
-            
-            # Clean old pending requests
-            expired_requests = [
-                req_id for req_id, request in self.pending_requests.items()
-                if (now - request.created_at).total_seconds() > 300  # 5 minutes
-            ]
-            for req_id in expired_requests:
-                del self.pending_requests[req_id]
-            
-            # Auto-lock on inactivity
-            if not self.is_locked and self.last_activity:
-                inactive_time = now - self.last_activity
-                if inactive_time.total_seconds() > ProtocolConfig.AUTO_LOCK_MINUTES * 60:
-                    self.is_locked = True
-                    self._clear_cache()
-                    logger.info("Wallet auto-locked due to inactivity")
+        try:
+            while True:
+                await asyncio.sleep(60)  # Run every minute
+                
+                # Clean expired sessions
+                now = datetime.now()
+                expired_tokens = [
+                    token for token, session in self.sessions.items()
+                    if now > session.expires_at
+                ]
+                for token in expired_tokens:
+                    del self.sessions[token]
+                
+                # Clean old pending requests
+                expired_requests = [
+                    req_id for req_id, request in self.pending_requests.items()
+                    if (now - request.created_at).total_seconds() > 300  # 5 minutes
+                ]
+                for req_id in expired_requests:
+                    del self.pending_requests[req_id]
+                
+                # Auto-lock on inactivity
+                if not self.is_locked and self.last_activity:
+                    inactive_time = now - self.last_activity
+                    if inactive_time.total_seconds() > ProtocolConfig.AUTO_LOCK_MINUTES * 60:
+                        self.is_locked = True
+                        self._clear_cache()
+                        logger.info("Wallet auto-locked due to inactivity")
+        except asyncio.CancelledError:
+            logger.info("Cleanup task cancelled during shutdown")
+            raise
     
     async def _cleanup_request(self, request_id: str):
         """Cleanup specific request after timeout"""
-        await asyncio.sleep(300)  # 5 minutes
-        self.pending_requests.pop(request_id, None)
+        try:
+            await asyncio.sleep(300)  # 5 minutes
+            self.pending_requests.pop(request_id, None)
+        except asyncio.CancelledError:
+            # Clean up the request immediately on cancellation
+            self.pending_requests.pop(request_id, None)
+            # Remove self from background tasks
+            current_task = asyncio.current_task()
+            self.background_tasks.discard(current_task)
     
     # Initialization
     async def _initialize_demo_wallet(self):
