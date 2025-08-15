@@ -705,7 +705,7 @@ server = WalletProtocolServer(
 )
 
 # Custom network configuration
-server.network = "https://mainnet.xian.org"
+server.network_url = "https://mainnet.xian.org"
 server.chain_id = "xian-mainnet"
 
 # Run on custom port
