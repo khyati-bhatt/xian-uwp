@@ -95,7 +95,7 @@ server.run()  # Starts on localhost:8545
 
 ```
 DApp (Any Technology)  →  HTTP Request   →  Wallet (Python)
-                      ←  JSON Response  ←
+                       ←  JSON Response  ←
 ```
 
 **Examples:**
