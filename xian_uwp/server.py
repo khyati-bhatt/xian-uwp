@@ -23,7 +23,7 @@ from xian_py.xian import Xian
 from xian_py.transaction import simulate_tx, get_nonce, create_tx, broadcast_tx_sync
 
 from .models import (
-    WalletType, Permission, ProtocolConfig, Endpoints, ErrorCodes,
+    WalletType, Permission, ProtocolConfig, Endpoints, ErrorCodes, CORSConfig,
     AuthorizationRequest, TransactionRequest, SignMessageRequest, AddTokenRequest, UnlockRequest,
     WalletInfo, BalanceResponse, TransactionResult, SignatureResponse, 
     AuthorizationResponse, StatusResponse,
@@ -39,12 +39,19 @@ logger = logging.getLogger(__name__)
 class WalletProtocolServer:
     """Universal Wallet Protocol Server"""
     
-    def __init__(self, wallet_type: WalletType = WalletType.DESKTOP):
+    def __init__(
+        self, 
+        wallet_type: WalletType = WalletType.DESKTOP,
+        cors_config: Optional[CORSConfig] = None
+    ):
         self.wallet_type = wallet_type
         self.wallet: Optional[Wallet] = None
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
         self.password_hash: Optional[str] = None
+        
+        # CORS configuration
+        self.cors_config = cors_config or CORSConfig.localhost_dev()
         
         # Network configuration
         self.network_url = "https://testnet.xian.org"
@@ -95,13 +102,15 @@ class WalletProtocolServer:
             lifespan=lifespan
         )
         
-        # CORS middleware
+        # CORS middleware with configurable settings
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],  # In production: specify exact origins
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=self.cors_config.allow_origins,
+            allow_credentials=self.cors_config.allow_credentials,
+            allow_methods=self.cors_config.allow_methods,
+            allow_headers=self.cors_config.allow_headers,
+            expose_headers=self.cors_config.expose_headers,
+            max_age=self.cors_config.max_age,
         )
         
         # Register routes
@@ -472,15 +481,28 @@ class WalletProtocolServer:
         except Exception as e:
             logger.error(f"Failed to initialize wallet: {e}")
     
-    def run(self, host: str = ProtocolConfig.DEFAULT_HOST, port: int = ProtocolConfig.DEFAULT_PORT):
+    def run(
+        self, 
+        host: str = ProtocolConfig.DEFAULT_HOST, 
+        port: int = ProtocolConfig.DEFAULT_PORT,
+        allow_any_host: bool = False
+    ):
         """Run the server"""
+        # Allow binding to any host for web deployment scenarios
+        if allow_any_host:
+            host = "0.0.0.0"
+        
         logger.info(f"🌐 Starting server on {host}:{port}")
+        logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
         uvicorn.run(self.app, host=host, port=port, log_level="info")
 
 
-def create_server(wallet_type: WalletType = WalletType.DESKTOP) -> WalletProtocolServer:
+def create_server(
+    wallet_type: WalletType = WalletType.DESKTOP,
+    cors_config: Optional[CORSConfig] = None
+) -> WalletProtocolServer:
     """Factory function to create server instance"""
-    return WalletProtocolServer(wallet_type=wallet_type)
+    return WalletProtocolServer(wallet_type=wallet_type, cors_config=cors_config)
 
 
 if __name__ == "__main__":
