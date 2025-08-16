@@ -1,5 +1,5 @@
 # examples/wallets/desktop.py
-# Requires: pip install flet>=0.28.3
+# Requires: pip install flet
 
 import flet as ft
 import threading
@@ -34,6 +34,7 @@ def main(page: ft.Page):
     page.window.width = 800
     page.window.height = 600
     page.window.center()
+    page.padding = 0
 
     wallet = DesktopWallet()
 
@@ -157,33 +158,43 @@ def main(page: ft.Page):
 
     # Layout
     page.add(
-        ft.Container(
-            content=ft.Column([
-                ft.Text(
+        ft.Column([
+            # Header
+            ft.Container(
+                content=ft.Text(
                     "Xian Desktop Wallet",
                     size=24,
                     weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE,
                     text_align=ft.TextAlign.CENTER
                 ),
-                ft.Divider(),
-                address_text,
-                balance_text,
-                status_text,
-                ft.Container(height=20),
-                password_field,
-                ft.Row([unlock_btn, lock_btn], alignment=ft.MainAxisAlignment.CENTER),
-                ft.Container(height=30),
-                server_status,
-                ft.Row([start_server_btn, stop_server_btn], alignment=ft.MainAxisAlignment.CENTER),
-            ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=10),
-            padding=30,
-            alignment=ft.alignment.center
-        )
+                bgcolor=ft.Colors.BLUE_600,
+                padding=20,
+                width=float("inf")
+            ),
+
+            # Main content
+            ft.Container(
+                content=ft.Column([
+                    address_text,
+                    balance_text,
+                    status_text,
+                    ft.Container(height=20),
+                    password_field,
+                    ft.Row([unlock_btn, lock_btn], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Container(height=30),
+                    server_status,
+                    ft.Row([start_server_btn, stop_server_btn], alignment=ft.MainAxisAlignment.CENTER),
+                ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10),
+                padding=30,
+                alignment=ft.alignment.center
+            )
+        ])
     )
 
 
-# Updated for Flet 0.28.3: Use ft.run instead of ft.app
+# Compatible with older Flet versions: Use ft.app instead of ft.run
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
