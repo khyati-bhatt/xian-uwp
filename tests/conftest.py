@@ -10,7 +10,7 @@ import pytest
 import threading
 import time
 from typing import AsyncGenerator, Generator
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import httpx
 import uvicorn
