@@ -1,541 +1,369 @@
 # examples/dapps/universal_dapp.py
-"""
-Universal DApp Example - Xian Universal Protocol
-Example DApp that connects to any wallet type (desktop, web, CLI)
-"""
+# Requires: pip install flet>=0.28.3
 
 import flet as ft
-import threading
-from typing import Optional
-
-# Import the universal protocol client
-from protocol.client import XianWalletClientSync, WalletProtocolError
-from protocol.models import WalletInfo
+from protocol.client import XianWalletClientSync
 
 
-class UniversalXianDApp:
-    """DApp that works with any Xian wallet (desktop, CLI, web extension)"""
-    
+class UniversalDApp:
     def __init__(self):
-        self.client: Optional[XianWalletClientSync] = None
-        self.wallet_info: Optional[WalletInfo] = None
-        self.page: Optional[ft.Page] = None
-        
-        # UI Components
-        self.connection_status = ft.Text("Not Connected", color="red")
-        self.wallet_type_indicator = ft.Text("Unknown Wallet Type")
-        self.wallet_address = ft.Text("No wallet connected")
-        self.wallet_balance = ft.Text("0")
-        self.output_text = ft.Text("Ready to connect to any Xian wallet...", expand=True)
-        
-    def setup_ui(self, page: ft.Page):
-        """Setup the universal DApp UI"""
-        self.page = page
-        page.title = "Universal Xian DApp"
-        page.theme_mode = ft.ThemeMode.LIGHT
-        page.scroll = ft.ScrollMode.AUTO
-        
-        # Header with universal wallet info
-        header = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.SYNC, color=ft.Colors.PURPLE),
-                ft.Text("Universal Xian DApp", size=24, weight=ft.FontWeight.BOLD),
-                ft.Container(expand=True),
-                ft.Column([
-                    self.connection_status,
-                    self.wallet_type_indicator
-                ], horizontal_alignment=ft.CrossAxisAlignment.END)
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.PURPLE_50,
-            border_radius=10,
-            margin=ft.Margin(0, 0, 0, 20)
-        )
-        
-        # Universal wallet connection section
-        wallet_section = ft.Container(
-            content=ft.Column([
-                ft.Text("Universal Wallet Connection", size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(
-                    "This DApp works with ANY Xian wallet type: Desktop, CLI, or Web Extension",
-                    color=ft.Colors.GREY_700,
-                    size=14
-                ),
-                ft.Divider(),
-                ft.Row([
-                    ft.Text("Status: ", weight=ft.FontWeight.BOLD),
-                    self.connection_status
-                ]),
-                ft.Row([
-                    ft.Text("Wallet Type: ", weight=ft.FontWeight.BOLD),
-                    self.wallet_type_indicator
-                ]),
-                ft.Row([
-                    ft.Text("Address: ", weight=ft.FontWeight.BOLD),
-                    self.wallet_address
-                ]),
-                ft.Row([
-                    ft.Text("Balance: ", weight=ft.FontWeight.BOLD),
-                    self.wallet_balance,
-                    ft.Text("XIAN")
-                ]),
-                ft.Row([
-                    ft.ElevatedButton(
-                        "Connect Any Wallet",
-                        on_click=self.connect_wallet,
-                        bgcolor=ft.Colors.PURPLE,
-                        color=ft.Colors.WHITE,
-                        icon=ft.Icons.LINK
-                    ),
-                    ft.ElevatedButton(
-                        "Disconnect",
-                        on_click=self.disconnect_wallet,
-                        bgcolor=ft.Colors.RED,
-                        color=ft.Colors.WHITE,
-                        icon=ft.Icons.LINK_OFF
-                    ),
-                    ft.ElevatedButton(
-                        "Refresh Data",
-                        on_click=self.refresh_data,
-                        bgcolor=ft.Colors.BLUE,
-                        color=ft.Colors.WHITE,
-                        icon=ft.Icons.REFRESH
-                    )
-                ])
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=10,
-            margin=ft.Margin(0, 0, 0, 20)
-        )
-        
-        # Transaction section
-        self.recipient_field = ft.TextField(
-            label="Recipient Address",
-            hint_text="Enter recipient address...",
-            expand=True
-        )
-        
-        self.amount_field = ft.TextField(
-            label="Amount",
-            hint_text="Enter amount to send...",
-            width=200,
-            keyboard_type=ft.KeyboardType.NUMBER
-        )
-        
-        transaction_section = ft.Container(
-            content=ft.Column([
-                ft.Text("Universal Transaction", size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(
-                    "Send transactions through any connected wallet type",
-                    color=ft.Colors.GREY_700,
-                    size=14
-                ),
-                ft.Divider(),
-                ft.Row([
-                    self.recipient_field,
-                    self.amount_field
-                ]),
-                ft.Row([
-                    ft.ElevatedButton(
-                        "Send XIAN",
-                        on_click=self.send_transaction,
-                        bgcolor=ft.Colors.GREEN,
-                        color=ft.Colors.WHITE,
-                        icon=ft.Icons.SEND
-                    ),
-                    ft.ElevatedButton(
-                        "Get Balance",
-                        on_click=self.get_balance,
-                        bgcolor=ft.Colors.ORANGE,
-                        color=ft.Colors.WHITE,
-                        icon=ft.Icons.ACCOUNT_BALANCE_WALLET
-                    )
-                ])
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=10,
-            margin=ft.Margin(0, 0, 0, 20)
-        )
-        
-        # Message signing section
-        self.message_field = ft.TextField(
-            label="Message to Sign",
-            hint_text="Enter message to sign...",
-            multiline=True,
-            min_lines=2,
-            max_lines=4,
-            expand=True
-        )
-        
-        self.signature_output = ft.TextField(
-            label="Signature Output",
-            read_only=True,
-            multiline=True,
-            min_lines=2,
-            max_lines=4,
-            expand=True
-        )
-        
-        signing_section = ft.Container(
-            content=ft.Column([
-                ft.Text("Universal Message Signing", size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(
-                    "Sign messages with any wallet type using the same interface",
-                    color=ft.Colors.GREY_700,
-                    size=14
-                ),
-                ft.Divider(),
-                self.message_field,
-                ft.ElevatedButton(
-                    "Sign Message",
-                    on_click=self.sign_message,
-                    bgcolor=ft.Colors.INDIGO,
-                    color=ft.Colors.WHITE,
-                    icon=ft.Icons.EDIT
-                ),
-                self.signature_output
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=10,
-            margin=ft.Margin(0, 0, 0, 20)
-        )
-        
-        # Wallet compatibility section
-        compatibility_section = ft.Container(
-            content=ft.Column([
-                ft.Text("Wallet Compatibility", size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(
-                    "This DApp is compatible with:",
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.GREY_700
-                ),
-                ft.Row([
-                    ft.Icon(ft.Icons.DESKTOP_WINDOWS, color=ft.Colors.BLUE),
-                    ft.Text("Desktop Wallets (Flet-based GUI)")
-                ]),
-                ft.Row([
-                    ft.Icon(ft.Icons.TERMINAL, color=ft.Colors.GREEN),
-                    ft.Text("CLI Wallets (Command-line daemon)")
-                ]),
-                ft.Row([
-                    ft.Icon(ft.Icons.WEB, color=ft.Colors.ORANGE),
-                    ft.Text("Web Wallets (Browser extension)")
-                ]),
-                ft.Row([
-                    ft.Icon(ft.Icons.HARDWARE, color=ft.Colors.PURPLE),
-                    ft.Text("Hardware Wallets (via protocol adapters)")
-                ]),
-                ft.Divider(),
-                ft.Text(
-                    "All wallet types expose the same API on localhost:8545",
-                    size=12,
-                    color=ft.Colors.GREY_600,
-                    italic=True
-                )
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=10,
-            margin=ft.Margin(0, 0, 0, 20)
-        )
-        
-        # Output log section
-        output_section = ft.Container(
-            content=ft.Column([
-                ft.Text("Activity Log", size=18, weight=ft.FontWeight.BOLD),
-                ft.Container(
-                    content=self.output_text,
-                    bgcolor=ft.Colors.BLACK,
-                    padding=15,
-                    border_radius=5,
-                    height=200
-                )
-            ]),
-            padding=20,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=10
-        )
-        
-        # Add all sections to page
-        page.add(
-            header,
-            wallet_section,
-            transaction_section,
-            signing_section,
-            compatibility_section,
-            output_section
-        )
-    
-    def log_output(self, message: str, color: str = "white"):
-        """Add message to output log"""
-        if self.page:
-            self.output_text.value = f"{self.output_text.value}\n{message}"
-            self.output_text.color = color
-            self.page.update()
-    
-    def run_in_thread(self, func, *args, **kwargs):
-        """Run a function in a separate thread to avoid blocking UI"""
-        def wrapper():
-            try:
-                func(*args, **kwargs)
-            except Exception as e:
-                self.log_output(f"❌ Error: {str(e)}", "red")
-        
-        thread = threading.Thread(target=wrapper)
-        thread.daemon = True
-        thread.start()
-    
-    # Wallet connection methods
-    def connect_wallet(self, e):
+        self.client = None
+        self.is_connected = False
+        self.wallet_info = None
+        self.balance = 0.0
+
+    def connect_wallet(self):
         """Connect to any available wallet"""
-        self.run_in_thread(self._connect_wallet)
-    
-    def _connect_wallet(self):
-        """Internal connect wallet method"""
         try:
-            self.log_output("🔄 Connecting to any available Xian wallet...", "yellow")
-            self.log_output("💡 Looking for wallet on localhost:8545", "cyan")
-            
-            # Create universal client
             self.client = XianWalletClientSync(
-                app_name="Universal Xian DApp",
-                app_url="http://localhost:8080"
+                app_name="Universal DApp Demo",
+                app_url="http://localhost:8080",
+                permissions=["wallet_info", "balance", "transactions", "sign_message"]
             )
-            
-            # Connect to any wallet type
-            success = self.client.connect(auto_approve=False)
-            
+
+            success = self.client.connect()
             if success:
-                # Get wallet info to determine type
                 self.wallet_info = self.client.get_wallet_info()
-                
-                # Update UI with wallet info
-                self.connection_status.value = "Connected"
-                self.connection_status.color = "green"
-                self.wallet_type_indicator.value = f"{self.wallet_info.wallet_type.value.title()} Wallet"
-                self.wallet_address.value = self.wallet_info.truncated_address
-                
-                # Get initial balance
-                self._refresh_balance()
-                
-                self.log_output("✅ Successfully connected to wallet!", "green")
-                self.log_output(f"📱 Wallet Type: {self.wallet_info.wallet_type.value.title()}", "cyan")
-                self.log_output(f"📍 Address: {self.wallet_info.address}", "cyan")
-                self.log_output(f"🌐 Network: {self.wallet_info.network}", "cyan")
-                
-            else:
-                self.log_output("❌ Failed to connect to wallet", "red")
-                self.log_output("💡 Make sure a Xian wallet is running on port 8545", "yellow")
-                
-            if self.page:
-                self.page.update()
-                
-        except WalletProtocolError as e:
-            self.log_output(f"❌ Connection failed: {str(e)}", "red")
-            if "not available" in str(e):
-                self.log_output("💡 Start a Xian wallet (desktop, CLI, or web extension)", "yellow")
-            self.connection_status.value = "Failed"
-            self.connection_status.color = "red"
-            if self.page:
-                self.page.update()
-    
-    def disconnect_wallet(self, e):
+                balance_info = self.client.get_balance("currency")
+                self.balance = balance_info.balance
+                self.is_connected = True
+                return True
+            return False
+        except Exception as e:
+            print(f"Connection error: {e}")
+            return False
+
+    def disconnect_wallet(self):
         """Disconnect from wallet"""
-        self.run_in_thread(self._disconnect_wallet)
-    
-    def _disconnect_wallet(self):
-        """Internal disconnect wallet method"""
+        self.client = None
+        self.is_connected = False
+        self.wallet_info = None
+        self.balance = 0.0
+
+    def send_transaction(self, recipient, amount):
+        """Send a transaction"""
+        if not self.is_connected or not self.client:
+            return {"success": False, "error": "Wallet not connected"}
+
         try:
-            if self.client:
-                self.client.disconnect()
-                self.client = None
-            
-            # Reset UI state
-            self.connection_status.value = "Not Connected"
-            self.connection_status.color = "red"
-            self.wallet_type_indicator.value = "Unknown Wallet Type"
-            self.wallet_address.value = "No wallet connected"
-            self.wallet_balance.value = "0"
-            self.wallet_info = None
-            
-            self.log_output("🔌 Disconnected from wallet", "orange")
-            
-            if self.page:
-                self.page.update()
-                
-        except Exception as e:
-            self.log_output(f"❌ Disconnect error: {str(e)}", "red")
-    
-    def refresh_data(self, e):
-        """Refresh wallet data"""
-        self.run_in_thread(self._refresh_data)
-    
-    def _refresh_data(self):
-        """Internal refresh data method"""
-        try:
-            if not self.client:
-                self.log_output("❌ No wallet connected", "red")
-                return
-            
-            self.log_output("🔄 Refreshing wallet data...", "yellow")
-            
-            # Refresh wallet info
-            self.wallet_info = self.client.get_wallet_info()
-            
-            # Refresh balance
-            self._refresh_balance()
-            
-            self.log_output("✅ Data refreshed successfully", "green")
-            
-        except Exception as e:
-            self.log_output(f"❌ Failed to refresh data: {str(e)}", "red")
-    
-    def _refresh_balance(self):
-        """Internal refresh balance method"""
-        try:
-            if not self.client:
-                return
-            
-            balance = self.client.get_balance("currency")
-            self.wallet_balance.value = str(balance)
-            self.log_output(f"💰 Balance: {balance} XIAN", "green")
-            
-            if self.page:
-                self.page.update()
-                
-        except Exception as e:
-            self.log_output(f"❌ Failed to get balance: {str(e)}", "red")
-    
-    # Transaction methods
-    def send_transaction(self, e):
-        """Send transaction through any wallet type"""
-        self.run_in_thread(self._send_transaction)
-    
-    def _send_transaction(self):
-        """Internal send transaction method"""
-        try:
-            if not self.client:
-                self.log_output("❌ No wallet connected", "red")
-                return
-            
-            recipient = self.recipient_field.value
-            amount_str = self.amount_field.value
-            
-            if not recipient or not amount_str:
-                self.log_output("❌ Please enter recipient and amount", "red")
-                return
-            
-            try:
-                amount = float(amount_str)
-            except ValueError:
-                self.log_output("❌ Invalid amount format", "red")
-                return
-            
-            self.log_output(f"🔄 Sending {amount} XIAN to {recipient[:8]}...", "yellow")
-            self.log_output(f"📱 Using {self.wallet_info.wallet_type.value} wallet", "cyan")
-            
             result = self.client.send_transaction(
                 contract="currency",
                 function="transfer",
-                kwargs={
-                    "to": recipient,
-                    "amount": amount
-                }
+                kwargs={"to": recipient, "amount": float(amount)},
+                stamps_supplied=50000
             )
-            
+
             if result.success:
-                self.log_output("✅ Transaction sent successfully!", "green")
-                if result.transaction_hash:
-                    self.log_output(f"📜 TX Hash: {result.transaction_hash}", "cyan")
-                
-                # Refresh balance after successful transaction
-                self._refresh_balance()
-            else:
-                self.log_output(f"❌ Transaction failed: {', '.join(result.errors or ['Unknown error'])}", "red")
-            
+                # Update balance after transaction
+                balance_info = self.client.get_balance("currency")
+                self.balance = balance_info.balance
+
+            return {
+                "success": result.success,
+                "hash": result.transaction_hash if result.success else None,
+                "error": result.errors if not result.success else None
+            }
         except Exception as e:
-            self.log_output(f"❌ Transaction error: {str(e)}", "red")
-    
-    def get_balance(self, e):
-        """Get balance from any wallet type"""
-        self.run_in_thread(self._get_balance)
-    
-    def _get_balance(self):
-        """Internal get balance method"""
+            return {"success": False, "error": str(e)}
+
+    def sign_message(self, message):
+        """Sign a message"""
+        if not self.is_connected or not self.client:
+            return {"success": False, "error": "Wallet not connected"}
+
         try:
-            if not self.client:
-                self.log_output("❌ No wallet connected", "red")
-                return
-            
-            self.log_output("🔄 Querying balance...", "yellow")
-            balance = self.client.get_balance("currency")
-            
-            self.wallet_balance.value = str(balance)
-            self.log_output(f"💰 Current balance: {balance} XIAN", "green")
-            
-            if self.page:
-                self.page.update()
-                
+            result = self.client.sign_message(message)
+            return {
+                "success": True,
+                "signature": result.signature,
+                "signer": result.signer
+            }
         except Exception as e:
-            self.log_output(f"❌ Failed to get balance: {str(e)}", "red")
-    
-    # Message signing methods
-    def sign_message(self, e):
-        """Sign message with any wallet type"""
-        self.run_in_thread(self._sign_message)
-    
-    def _sign_message(self):
-        """Internal sign message method"""
-        try:
-            if not self.client:
-                self.log_output("❌ No wallet connected", "red")
-                return
-            
-            message = self.message_field.value
-            if not message:
-                self.log_output("❌ Please enter a message to sign", "red")
-                return
-            
-            self.log_output("🔄 Signing message...", "yellow")
-            self.log_output(f"📱 Using {self.wallet_info.wallet_type.value} wallet", "cyan")
-            
-            signature = self.client.sign_message(message)
-            
-            self.signature_output.value = signature
-            self.log_output("✅ Message signed successfully!", "green")
-            self.log_output(f"📝 Signature: {signature[:32]}...", "cyan")
-            
-            if self.page:
-                self.page.update()
-                
-        except Exception as e:
-            self.log_output(f"❌ Failed to sign message: {str(e)}", "red")
+            return {"success": False, "error": str(e)}
 
 
 def main(page: ft.Page):
-    """Main function for universal DApp"""
-    dapp = UniversalXianDApp()
-    dapp.setup_ui(page)
+    page.title = "Universal Xian DApp"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.window.width = 900
+    page.window.height = 700
+    page.window.center()
+    page.scroll = ft.ScrollMode.AUTO
 
+    dapp = UniversalDApp()
 
-if __name__ == "__main__":
-    print("🚀 Starting Universal DApp Example...")
-    print("🔗 This example DApp works with ANY Xian wallet type:")
-    print("   📱 Desktop wallets (GUI applications)")
-    print("   🌐 Web wallets (browser-based Flet apps)")
-    print("   💻 CLI wallets (command-line daemons)")  
-    print("   🔧 Hardware wallets (via adapters)")
-    print()
-    print("💡 Make sure a Xian wallet is running on port 8545")
-    print("🌐 DApp will be available at http://localhost:8080")
-    
-    # Run as web app
-    ft.app(
-        target=main,
-        view=ft.AppView.WEB_BROWSER,
-        port=8080,
-        host="127.0.0.1"
+    # UI Components
+    connection_status = ft.Container(
+        content=ft.Row([
+            ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400),
+            ft.Text("Not Connected", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_600)
+        ], alignment=ft.MainAxisAlignment.CENTER),
+        padding=15,
+        border_radius=10,
+        bgcolor=ft.Colors.RED_50,
+        border=ft.border.all(2, ft.Colors.RED_200)
     )
+
+    wallet_details = ft.Container(
+        content=ft.Text("Connect wallet to view details", color=ft.Colors.GREY_600),
+        padding=20,
+        border_radius=10,
+        bgcolor=ft.Colors.GREY_50,
+        visible=False
+    )
+
+    # Transaction form
+    recipient_field = ft.TextField(
+        label="Recipient Address",
+        width=400,
+        border_color=ft.Colors.BLUE_400
+    )
+
+    amount_field = ft.TextField(
+        label="Amount (XIAN)",
+        width=200,
+        border_color=ft.Colors.BLUE_400
+    )
+
+    # Message signing
+    message_field = ft.TextField(
+        label="Message to Sign",
+        width=400,
+        multiline=True,
+        max_lines=3,
+        border_color=ft.Colors.PURPLE_400
+    )
+
+    # Results area
+    results_text = ft.Text(
+        "Ready to connect...",
+        size=14,
+        color=ft.Colors.GREY_700
+    )
+
+    def show_notification(message, error=False):
+        page.snack_bar = ft.SnackBar(
+            content=ft.Text(message),
+            bgcolor=ft.Colors.RED_400 if error else ft.Colors.GREEN_400
+        )
+        page.snack_bar.open = True
+        page.update()
+
+    def connect_wallet_click():
+        results_text.value = "Connecting to wallet..."
+        page.update()
+
+        success = dapp.connect_wallet()
+        if success:
+            # Update connection status
+            connection_status.content = ft.Row([
+                ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400),
+                ft.Text("Connected", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_600)
+            ], alignment=ft.MainAxisAlignment.CENTER)
+            connection_status.bgcolor = ft.Colors.GREEN_50
+            connection_status.border = ft.border.all(2, ft.Colors.GREEN_200)
+
+            # Show wallet details
+            wallet_details.content = ft.Column([
+                ft.Text("Wallet Information", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text(f"Address: {dapp.wallet_info.truncated_address}", size=14),
+                ft.Text(f"Full Address: {dapp.wallet_info.address}", size=12, color=ft.Colors.GREY_600),
+                ft.Text(f"Type: {dapp.wallet_info.wallet_type.title()}", size=14),
+                ft.Text(f"Balance: {dapp.balance} XIAN", size=16, color=ft.Colors.GREEN_700, weight=ft.FontWeight.BOLD),
+                ft.Text(f"Network: {dapp.wallet_info.network}", size=12, color=ft.Colors.GREY_600),
+            ], spacing=5)
+            wallet_details.bgcolor = ft.Colors.BLUE_50
+            wallet_details.visible = True
+
+            # Update buttons
+            connect_btn.visible = False
+            disconnect_btn.visible = True
+
+            results_text.value = "✅ Wallet connected successfully!"
+            results_text.color = ft.Colors.GREEN_700
+            show_notification("Wallet connected successfully!")
+        else:
+            results_text.value = "❌ Failed to connect to wallet. Make sure a wallet is running on port 8545."
+            results_text.color = ft.Colors.RED_700
+            show_notification("Connection failed", error=True)
+
+        page.update()
+
+    def disconnect_wallet_click():
+        dapp.disconnect_wallet()
+
+        # Reset UI
+        connection_status.content = ft.Row([
+            ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400),
+            ft.Text("Not Connected", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_600)
+        ], alignment=ft.MainAxisAlignment.CENTER)
+        connection_status.bgcolor = ft.Colors.RED_50
+        connection_status.border = ft.border.all(2, ft.Colors.RED_200)
+
+        wallet_details.visible = False
+        connect_btn.visible = True
+        disconnect_btn.visible = False
+
+        results_text.value = "Wallet disconnected"
+        results_text.color = ft.Colors.GREY_700
+
+        page.update()
+
+    def send_transaction_click():
+        if not recipient_field.value or not amount_field.value:
+            show_notification("Please fill in recipient and amount", error=True)
+            return
+
+        results_text.value = "Sending transaction..."
+        page.update()
+
+        result = dapp.send_transaction(recipient_field.value, amount_field.value)
+
+        if result["success"]:
+            results_text.value = f"✅ Transaction successful!\nHash: {result['hash']}\nNew Balance: {dapp.balance} XIAN"
+            results_text.color = ft.Colors.GREEN_700
+            recipient_field.value = ""
+            amount_field.value = ""
+
+            # Update balance display
+            if wallet_details.visible:
+                wallet_details.content.controls[4].value = f"Balance: {dapp.balance} XIAN"
+
+            show_notification("Transaction sent successfully!")
+        else:
+            results_text.value = f"❌ Transaction failed: {result['error']}"
+            results_text.color = ft.Colors.RED_700
+            show_notification("Transaction failed", error=True)
+
+        page.update()
+
+    def sign_message_click():
+        if not message_field.value:
+            show_notification("Please enter a message to sign", error=True)
+            return
+
+        results_text.value = "Signing message..."
+        page.update()
+
+        result = dapp.sign_message(message_field.value)
+
+        if result["success"]:
+            results_text.value = f"✅ Message signed!\nSignature: {result['signature'][:50]}...\nSigner: {result['signer']}"
+            results_text.color = ft.Colors.GREEN_700
+            show_notification("Message signed successfully!")
+        else:
+            results_text.value = f"❌ Signing failed: {result['error']}"
+            results_text.color = ft.Colors.RED_700
+            show_notification("Signing failed", error=True)
+
+        page.update()
+
+    # Buttons
+    connect_btn = ft.ElevatedButton(
+        "Connect Wallet",
+        on_click=lambda _: connect_wallet_click(),
+        bgcolor=ft.Colors.BLUE_400,
+        color=ft.Colors.WHITE,
+        width=200
+    )
+
+    disconnect_btn = ft.ElevatedButton(
+        "Disconnect",
+        on_click=lambda _: disconnect_wallet_click(),
+        bgcolor=ft.Colors.RED_400,
+        color=ft.Colors.WHITE,
+        width=200,
+        visible=False
+    )
+
+    # Layout
+    page.add(
+        ft.Container(
+            content=ft.Column([
+                # Header
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Universal Xian DApp", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("Works with Desktop, CLI, and Web wallets", size=14, color=ft.Colors.WHITE70)
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=20,
+                    border_radius=ft.border_radius.only(top_left=10, top_right=10)
+                ),
+
+                # Connection section
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Wallet Connection", size=20, weight=ft.FontWeight.BOLD),
+                        connection_status,
+                        ft.Row([connect_btn, disconnect_btn], alignment=ft.MainAxisAlignment.CENTER),
+                        wallet_details
+                    ], spacing=15),
+                    padding=20
+                ),
+
+                ft.Divider(),
+
+                # Transaction section
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Send Transaction", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Row([recipient_field, amount_field], spacing=20),
+                        ft.ElevatedButton(
+                            "Send Transaction",
+                            on_click=lambda _: send_transaction_click(),
+                            bgcolor=ft.Colors.GREEN_400,
+                            color=ft.Colors.WHITE,
+                            disabled=not dapp.is_connected
+                        )
+                    ], spacing=15),
+                    padding=20
+                ),
+
+                ft.Divider(),
+
+                # Message signing section
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Sign Message", size=20, weight=ft.FontWeight.BOLD),
+                        message_field,
+                        ft.ElevatedButton(
+                            "Sign Message",
+                            on_click=lambda _: sign_message_click(),
+                            bgcolor=ft.Colors.PURPLE_400,
+                            color=ft.Colors.WHITE,
+                            disabled=not dapp.is_connected
+                        )
+                    ], spacing=15),
+                    padding=20
+                ),
+
+                ft.Divider(),
+
+                # Results section
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Results", size=18, weight=ft.FontWeight.BOLD),
+                        ft.Container(
+                            content=results_text,
+                            padding=15,
+                            border_radius=8,
+                            bgcolor=ft.Colors.GREY_100,
+                            border=ft.border.all(1, ft.Colors.GREY_300),
+                            width=float("inf")
+                        )
+                    ], spacing=10),
+                    padding=20
+                )
+            ]),
+            width=float("inf"),
+            border_radius=10,
+            bgcolor=ft.Colors.WHITE,
+            border=ft.border.all(1, ft.Colors.GREY_300)
+        )
+    )
+
+
+# Updated for Flet 0.28.3: Use ft.run
+if __name__ == "__main__":
+    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8080)
