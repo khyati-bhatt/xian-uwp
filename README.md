@@ -499,19 +499,19 @@ pip install fastapi uvicorn httpx websockets pydantic xian-py
 
 **For Desktop Wallet Development:**
 ```bash
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 ```
 
 **For CLI Wallet Development:**
 ```bash
-pip install click>=8.1.0
+pip install click>=8.2.1
 pip install cryptography>=41.0.0  # For encrypted wallet storage
 ```
 
 **For Running Examples:**
 ```bash
-pip install flet>=0.21.0  # Required for Flet examples
-pip install reflex>=0.6.0  # Required for Reflex examples
+pip install flet>=0.28.3  # Required for Flet examples
+pip install reflex>=0.8.6  # Required for Reflex examples
 ```
 
 ### 2. Project Structure
@@ -553,7 +553,7 @@ xian-universal-wallet-protocol/
 
 ```bash
 # Install desktop wallet dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run desktop wallet example
 PYTHONPATH=. python examples/wallets/desktop.py
@@ -563,7 +563,7 @@ PYTHONPATH=. python examples/wallets/desktop.py
 
 ```bash
 # Install web wallet dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run web wallet example (opens in browser)
 PYTHONPATH=. python examples/wallets/web.py
@@ -573,7 +573,7 @@ PYTHONPATH=. python examples/wallets/web.py
 
 ```bash
 # Install CLI wallet dependencies  
-pip install click>=8.1.0 cryptography>=41.0.0
+pip install click>=8.2.1 cryptography>=41.0.0
 
 # Create wallet
 PYTHONPATH=. python examples/wallets/cli.py create
@@ -587,7 +587,7 @@ PYTHONPATH=. python examples/wallets/cli.py start
 **Flet DApp Example:**
 ```bash
 # Install Flet DApp dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run Flet DApp example
 PYTHONPATH=. python examples/dapps/universal_dapp.py
@@ -596,7 +596,7 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 **Reflex DApp Example:**
 ```bash
 # Install Reflex DApp dependencies
-pip install reflex>=0.6.0
+pip install reflex>=0.8.6
 
 # Run Reflex DApp example
 cd examples/dapps && PYTHONPATH=../.. reflex run
@@ -608,7 +608,7 @@ cd examples/dapps && PYTHONPATH=../.. reflex run
 
 ```python
 # examples/dapps/universal_dapp.py
-# Requires: pip install flet>=0.21.0
+# Requires: pip install flet>=0.28.3
 
 from protocol.client import XianWalletClientSync
 
@@ -633,7 +633,7 @@ class MyDApp:
 
 ```python
 # examples/dapps/reflex_dapp.py  
-# Requires: pip install reflex>=0.6.0
+# Requires: pip install reflex>=0.8.6
 
 import reflex as rx
 from protocol.client import XianWalletClientSync
@@ -865,8 +865,8 @@ PYTHONPATH=. python examples/wallets/cli.py start
 
 ```bash
 # Install example dependencies first
-pip install flet>=0.21.0      # For Flet examples
-pip install reflex>=0.6.0     # For Reflex examples
+pip install flet>=0.28.3      # For Flet examples
+pip install reflex>=0.8.6     # For Reflex examples
 
 # Run Flet DApp example
 PYTHONPATH=. python examples/dapps/universal_dapp.py
