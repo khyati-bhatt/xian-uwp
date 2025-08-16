@@ -530,7 +530,8 @@ xian-universal-wallet-protocol/
 │   │   └── cli.py         # CLI wallet example (requires: click, cryptography)
 │   └── dapps/             # DApp examples
 │       ├── universal_dapp.py  # Flet DApp example (requires: flet)
-│       └── reflex_dapp.py     # Reflex DApp example (requires: reflex)
+│       ├── reflex_dapp.py     # Reflex DApp example (requires: reflex)
+│       └── html-js-dapp/      # Pure HTML/JS DApp example (no dependencies)
 ├── requirements.txt       # Core protocol dependencies only
 └── README.md
 ```
@@ -548,6 +549,7 @@ xian-universal-wallet-protocol/
 - `cli.py` - Example of a command-line wallet with daemon mode
 - `universal_dapp.py` - Sample DApp showing wallet integration with Flet UI
 - `reflex_dapp.py` - Sample DApp using the Reflex framework instead of Flet
+- `html-js-dapp/` - Pure HTML/JavaScript DApp example (no Python frameworks required)
 
 ### 3. Run Desktop Wallet Example
 
@@ -600,6 +602,17 @@ pip install reflex>=0.8.6
 
 # Run Reflex DApp example
 cd examples/dapps && PYTHONPATH=../.. reflex run
+```
+
+**HTML/JavaScript DApp Example:**
+```bash
+# No dependencies required - pure HTML/CSS/JavaScript
+
+# Serve the files (required for CORS)
+cd examples/dapps/html-js-dapp
+python -m http.server 8080
+
+# Open http://localhost:8080 in your browser
 ```
 
 ## Example Implementations
@@ -668,9 +681,64 @@ app = rx.App()
 app.add_page(index)
 ```
 
-**Both examples work with any wallet type:** Desktop, Web, CLI, or Hardware wallets.
+**All examples work with any wallet type:** Desktop, Web, CLI, or Hardware wallets.
 
-### Web DApp Example
+### HTML/JavaScript DApp Example
+
+```javascript
+// examples/dapps/html-js-dapp/xian-wallet-client.js
+// Pure JavaScript client - no frameworks required
+
+class XianWalletClient {
+    constructor(appName, appUrl = 'http://localhost', serverUrl = 'http://127.0.0.1:8545') {
+        this.appName = appName;
+        this.appUrl = appUrl;
+        this.serverUrl = serverUrl;
+        this.sessionToken = null;
+        this.isConnected = false;
+    }
+
+    async connect() {
+        // Request authorization
+        const authResponse = await this.requestAuthorization();
+        
+        // Wait for user approval
+        const approval = await this.pollForApproval(authResponse.request_id);
+        
+        this.sessionToken = approval.session_token;
+        this.isConnected = true;
+        
+        return { success: true, walletInfo: await this.getWalletInfo() };
+    }
+
+    async sendTransaction(contract, functionName, kwargs, stampsSupplied = 50000) {
+        const response = await fetch(`${this.serverUrl}/api/v1/transaction`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.sessionToken}`
+            },
+            body: JSON.stringify({
+                contract, function: functionName, kwargs, stamps_supplied: stampsSupplied
+            })
+        });
+        return await response.json();
+    }
+}
+
+// Usage in HTML
+const client = new XianWalletClient('My HTML DApp');
+await client.connect();
+const balance = await client.getBalance('currency');
+```
+
+**Features:**
+- **Pure HTML/CSS/JavaScript** - No build tools or frameworks
+- **Universal Wallet Support** - Works with any wallet type
+- **Complete API Coverage** - All protocol features available
+- **Modern JavaScript** - Uses async/await and fetch API
+
+### Legacy Web DApp Example
 
 ```html
 <!-- For legacy JavaScript compatibility -->
@@ -684,7 +752,7 @@ XianWalletUtils.init().then(() => {
 </script>
 ```
 
-**Note:** Web wallets provide the same localhost:8545 API, so existing JavaScript code works unchanged.
+**Note:** All wallet types provide the same localhost:8545 API, so existing JavaScript code works unchanged.
 
 ## Configuration Options
 
@@ -873,6 +941,10 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 
 # Run Reflex DApp example
 cd examples/dapps && PYTHONPATH=../.. reflex run
+
+# Run HTML/JS DApp example (no dependencies)
+cd examples/dapps/html-js-dapp && python -m http.server 8080
+# Then open http://localhost:8080 in your browser
 ```
 
 ## Error Handling
