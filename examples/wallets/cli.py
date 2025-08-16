@@ -4,6 +4,7 @@
 import click
 import json
 import hashlib
+
 from pathlib import Path
 from cryptography.fernet import Fernet
 from xian_uwp.server import WalletProtocolServer

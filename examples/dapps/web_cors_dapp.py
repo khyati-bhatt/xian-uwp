@@ -3,14 +3,13 @@
 Web DApp Example with CORS Support
 Demonstrates how to create a web-based DApp that connects to a local wallet
 """
-
-import reflex as rx
-from typing import Optional
-import asyncio
 import logging
 
-from xian_uwp.client import XianWalletClientSync
-from xian_uwp.models import Permission, WalletProtocolError
+import reflex as rx
+
+from typing import Optional
+from xian_uwp.client import XianWalletClientSync, WalletProtocolError
+from xian_uwp.models import Permission
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

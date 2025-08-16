@@ -1,8 +1,10 @@
 # examples/wallets/web.py
 # Requires: pip install flet>=0.28.3
 
-import flet as ft
 import threading
+
+import flet as ft
+
 from xian_uwp.server import WalletProtocolServer
 from xian_uwp.models import WalletType
 

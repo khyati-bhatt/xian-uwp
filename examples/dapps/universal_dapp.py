@@ -2,6 +2,7 @@
 # Requires: pip install flet>=0.28.3
 
 import flet as ft
+
 from xian_uwp.client import XianWalletClientSync
 
 
