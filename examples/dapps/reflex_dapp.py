@@ -255,11 +255,15 @@ app = rx.App(
         has_background=True,
         radius="medium",
         scaling="100%"
-    )
+    ),
+    disable_plugins=["reflex.plugins.sitemap.SitemapPlugin"]
 )
 
 # Add the page
 app.add_page(index, route="/")
 
+# For Reflex, you typically run with: reflex run
+# But for this example to work with python -m, we'll use a simple approach
 if __name__ == "__main__":
-    app.run()
+    print("Reflex DApp configured. To run properly, use: reflex run")
+    print("Or use the universal_dapp.py example instead.")
