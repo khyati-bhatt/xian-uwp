@@ -4,6 +4,8 @@
 
 **⚠️ Important**: Default port is **8545** (configurable). All wallet types use the same port.
 
+**📁 Running Examples**: All examples require `PYTHONPATH=.` to import protocol modules correctly.
+
 ## ⚡ Installation
 
 ```bash
@@ -105,8 +107,8 @@ server.wallet = your_wallet_instance
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
 
 # CLI Wallet
-python examples/wallets/cli.py create
-python examples/wallets/cli.py start
+PYTHONPATH=. python examples/wallets/cli.py create
+PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
 ## 🔄 WebSocket Events
@@ -169,13 +171,13 @@ pip install reflex>=0.6.0         # For Reflex examples
 netstat -an | grep 8545
 
 # Run wallet examples
-python examples/wallets/desktop.py    # Desktop
-python examples/wallets/web.py        # Web  
-python examples/wallets/cli.py start  # CLI
+PYTHONPATH=. python examples/wallets/desktop.py    # Desktop
+PYTHONPATH=. python examples/wallets/web.py        # Web  
+PYTHONPATH=. python examples/wallets/cli.py start  # CLI
 
 # Run DApp examples
-python examples/dapps/universal_dapp.py  # Flet
-cd examples/dapps && reflex run          # Reflex
+PYTHONPATH=. python examples/dapps/universal_dapp.py  # Flet
+cd examples/dapps && PYTHONPATH=../.. reflex run # Reflex
 ```
 
 ---
