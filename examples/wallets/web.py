@@ -1,8 +1,10 @@
 # examples/wallets/web.py
+# Updated for Flet 0.28.3+ (fallback to older versions)
 # Requires: pip install flet
 
 import flet as ft
 import threading
+import asyncio
 from protocol.server import WalletProtocolServer
 from protocol.models import WalletType
 
@@ -257,7 +259,8 @@ def main(page: ft.Page):
             ft.NavigationRailDestination(icon=ft.Icons.SEND, label="Send"),
             ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="Settings")
         ],
-        on_change=lambda e: switch_tab(["wallet", "send", "settings"][e.control.selected_index])
+        on_change=lambda e: switch_tab(["wallet", "send", "settings"][e.control.selected_index]),
+        expand=True
     )
 
     # Content area
@@ -269,20 +272,27 @@ def main(page: ft.Page):
 
     # Main layout
     page.add(
-        ft.Column([
-            ft.Container(
-                content=ft.Text("Xian Web Wallet", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                bgcolor=ft.Colors.BLUE_600,
-                padding=20,
-                width=float("inf"),
-                alignment=ft.alignment.center
-            ),
-            ft.Row([
-                nav_rail,
-                ft.VerticalDivider(width=1),
-                content_area
-            ], expand=True)
-        ], expand=True)
+        ft.Container(
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Text("Xian Web Wallet", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=20,
+                    width=float("inf"),
+                    alignment=ft.alignment.center
+                ),
+                ft.Container(
+                    content=ft.Row([
+                        nav_rail,
+                        ft.VerticalDivider(width=1),
+                        content_area
+                    ]),
+                    expand=True
+                )
+            ]),
+            height=page.window.height or 600,
+            expand=True
+        )
     )
 
 
