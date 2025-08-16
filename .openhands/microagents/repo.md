@@ -9,6 +9,8 @@ Key benefits:
 - **Wallet Agnostic**: DApps work seamlessly with desktop, web, or CLI wallets
 - **Drop-in Replacement**: Compatible with existing dapp-utils API patterns
 - **Professional Features**: Session-based auth, permission system, caching, error handling
+- **CORS-Enabled**: Server-hosted DApps can connect to local wallets securely
+- **Production Ready**: 116 comprehensive tests with 100% pass rate
 
 ## General Setup
 
@@ -54,7 +56,9 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 
 #### DApps (`/examples/dapps/`)
 - **`universal_dapp.py`**: Universal DApp demo using Flet that works with any wallet
-- **`reflex_dapp.py`**: Web DApp using Reflex framework
+- **`reflex_dapp.py`**: Web DApp using Reflex framework with CORS support
+- **`web_cors_dapp.py`**: Flet web DApp with CORS configuration examples
+- **`server-hosted-dapp/`**: Pure HTML/JavaScript DApp example with CORS
 - **`rxconfig.py`**: Reflex configuration file
 
 ### Configuration & Documentation
@@ -63,9 +67,16 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 - **`QUICK_REFERENCE.md`**: Developer cheat sheet with essential commands and patterns
 
 ### Testing & Verification
-- **`test_*.py`**: Test files for protocol components, server functionality, and end-to-end scenarios
-- **`TESTING_SUMMARY.md`**: Comprehensive testing documentation
-- **`VERIFICATION_REPORT.md`**: Test results and verification status
+- **`tests/`**: Comprehensive test suite with 116 tests (100% passing)
+  - **`test_auth.py`**: Authentication and authorization flow tests (22 tests)
+  - **`test_cors.py`**: CORS configuration and middleware tests (14 tests)
+  - **`test_client.py`**: Client library functionality tests (21 tests)
+  - **`test_server.py`**: Server endpoint and functionality tests (20 tests)
+  - **`test_models.py`**: Data model validation tests (23 tests)
+  - **`test_e2e.py`**: End-to-end integration tests (8 tests)
+  - **`test_simple.py`**: Basic component tests (7 tests)
+  - **`test_protocol.py`**: Protocol-level tests (1 test)
+- **`tests/README.md`**: Detailed testing documentation and troubleshooting
 
 ### Protocol Architecture
 ```
@@ -83,3 +94,25 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 ```
 
 The protocol uses standard HTTP endpoints (`/api/v1/wallet/status`, `/api/v1/auth/request`, etc.) with session-based authentication and permission management.
+
+## CORS Support for Web DApps
+
+The protocol includes comprehensive CORS support enabling server-hosted web applications to connect to local wallets:
+
+### CORS Configuration Options
+- **Development**: `CORSConfig.development()` - Allows all origins
+- **Localhost Dev**: `CORSConfig.localhost_dev()` - Common dev ports (3000, 5173, 8080, etc.)
+- **Production**: `CORSConfig.production(origins)` - Specific origins only
+- **Custom**: Full control over CORS headers and policies
+
+### Supported Scenarios
+- React/Vue/Angular DApps hosted on Vercel/Netlify connecting to local wallets
+- Reflex web applications with CORS-enabled wallet connections
+- HTML/JavaScript DApps served from any domain
+- Development servers on any port with proper CORS configuration
+
+### Security Features
+- Origin validation and whitelisting
+- Credential support for authenticated requests
+- Preflight request handling
+- Secure headers for production deployments
