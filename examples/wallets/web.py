@@ -1,5 +1,5 @@
 # examples/wallets/web.py
-# Requires: pip install flet
+# Requires: pip install flet>=0.28.3
 
 import flet as ft
 import threading

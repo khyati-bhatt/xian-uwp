@@ -4,6 +4,8 @@
 
 **⚠️ Important**: Default port is **8545** (configurable). All wallet types use the same port.
 
+**📁 Running Examples**: All examples require `PYTHONPATH=.` to import protocol modules correctly.
+
 ## ⚡ Installation
 
 ```bash
@@ -11,9 +13,9 @@
 pip install fastapi uvicorn httpx websockets pydantic xian-py
 
 # Add as needed:
-pip install flet>=0.21.0          # Desktop wallets + Flet examples
-pip install reflex>=0.6.0         # Reflex DApp examples
-pip install click>=8.1.0          # CLI wallets  
+pip install flet>=0.28.3          # Desktop wallets + Flet examples
+pip install reflex>=0.8.6         # Reflex DApp examples
+pip install click>=8.2.1          # CLI wallets  
 pip install cryptography>=41.0.0  # Encrypted storage
 ```
 
@@ -105,8 +107,8 @@ server.wallet = your_wallet_instance
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
 
 # CLI Wallet
-python examples/wallets/cli.py create
-python examples/wallets/cli.py start
+PYTHONPATH=. python examples/wallets/cli.py create
+PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
 ## 🔄 WebSocket Events
@@ -162,20 +164,20 @@ if check_wallet_available_sync():
 curl localhost:8545/api/v1/wallet/status
 
 # Missing dependencies for examples
-pip install flet>=0.21.0          # For Flet examples
-pip install reflex>=0.6.0         # For Reflex examples
+pip install flet>=0.28.3          # For Flet examples
+pip install reflex>=0.8.6         # For Reflex examples
 
 # Port in use
 netstat -an | grep 8545
 
 # Run wallet examples
-python examples/wallets/desktop.py    # Desktop
-python examples/wallets/web.py        # Web  
-python examples/wallets/cli.py start  # CLI
+PYTHONPATH=. python examples/wallets/desktop.py    # Desktop
+PYTHONPATH=. python examples/wallets/web.py        # Web  
+PYTHONPATH=. python examples/wallets/cli.py start  # CLI
 
 # Run DApp examples
-python examples/dapps/universal_dapp.py  # Flet
-cd examples/dapps && reflex run          # Reflex
+PYTHONPATH=. python examples/dapps/universal_dapp.py  # Flet
+cd examples/dapps && PYTHONPATH=../.. reflex run # Reflex
 ```
 
 ---

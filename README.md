@@ -499,19 +499,19 @@ pip install fastapi uvicorn httpx websockets pydantic xian-py
 
 **For Desktop Wallet Development:**
 ```bash
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 ```
 
 **For CLI Wallet Development:**
 ```bash
-pip install click>=8.1.0
+pip install click>=8.2.1
 pip install cryptography>=41.0.0  # For encrypted wallet storage
 ```
 
 **For Running Examples:**
 ```bash
-pip install flet>=0.21.0  # Required for Flet examples
-pip install reflex>=0.6.0  # Required for Reflex examples
+pip install flet>=0.28.3  # Required for Flet examples
+pip install reflex>=0.8.6  # Required for Reflex examples
 ```
 
 ### 2. Project Structure
@@ -540,6 +540,7 @@ xian-universal-wallet-protocol/
 - **Examples**: All files in `examples/` are reference implementations to learn from
 - **Dependencies**: `requirements.txt` contains only what's needed for the protocol itself
 - **Additional Dependencies**: Each example may require additional packages (noted above)
+- **PYTHONPATH**: Examples require `PYTHONPATH=.` to import the protocol modules correctly
 
 **Example Files Explained:**
 - `desktop.py` - Shows how to embed the protocol server in a desktop GUI application
@@ -552,33 +553,33 @@ xian-universal-wallet-protocol/
 
 ```bash
 # Install desktop wallet dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run desktop wallet example
-python examples/wallets/desktop.py
+PYTHONPATH=. python examples/wallets/desktop.py
 ```
 
 ### 4. Run Web Wallet Example
 
 ```bash
 # Install web wallet dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run web wallet example (opens in browser)
-python examples/wallets/web.py
+PYTHONPATH=. python examples/wallets/web.py
 ```
 
 ### 5. Run CLI Wallet Example
 
 ```bash
 # Install CLI wallet dependencies  
-pip install click>=8.1.0 cryptography>=41.0.0
+pip install click>=8.2.1 cryptography>=41.0.0
 
 # Create wallet
-python examples/wallets/cli.py create
+PYTHONPATH=. python examples/wallets/cli.py create
 
 # Start daemon
-python examples/wallets/cli.py start
+PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
 ### 6. Run DApp Examples
@@ -586,22 +587,19 @@ python examples/wallets/cli.py start
 **Flet DApp Example:**
 ```bash
 # Install Flet DApp dependencies
-pip install flet>=0.21.0
+pip install flet>=0.28.3
 
 # Run Flet DApp example
-python examples/dapps/universal_dapp.py
+PYTHONPATH=. python examples/dapps/universal_dapp.py
 ```
 
 **Reflex DApp Example:**
 ```bash
 # Install Reflex DApp dependencies
-pip install reflex>=0.6.0
+pip install reflex>=0.8.6
 
-# Initialize and run Reflex DApp
-cd examples/dapps/
-reflex init --template blank
-# Copy reflex_dapp.py content to the generated app
-reflex run
+# Run Reflex DApp example
+cd examples/dapps && PYTHONPATH=../.. reflex run
 ```
 
 ## Example Implementations
@@ -610,7 +608,7 @@ reflex run
 
 ```python
 # examples/dapps/universal_dapp.py
-# Requires: pip install flet>=0.21.0
+# Requires: pip install flet>=0.28.3
 
 from protocol.client import XianWalletClientSync
 
@@ -635,7 +633,7 @@ class MyDApp:
 
 ```python
 # examples/dapps/reflex_dapp.py  
-# Requires: pip install reflex>=0.6.0
+# Requires: pip install reflex>=0.8.6
 
 import reflex as rx
 from protocol.client import XianWalletClientSync
@@ -854,28 +852,27 @@ asyncio.run(test_auth_flow())
 
 ```bash
 # Test desktop wallet example
-python examples/wallets/desktop.py
+PYTHONPATH=. python examples/wallets/desktop.py
 
 # Test web wallet example
-python examples/wallets/web.py
+PYTHONPATH=. python examples/wallets/web.py
 
 # Test CLI wallet example
-python examples/wallets/cli.py start
+PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
 ### Run Examples
 
 ```bash
 # Install example dependencies first
-pip install flet>=0.21.0      # For Flet examples
-pip install reflex>=0.6.0     # For Reflex examples
+pip install flet>=0.28.3      # For Flet examples
+pip install reflex>=0.8.6     # For Reflex examples
 
 # Run Flet DApp example
-python examples/dapps/universal_dapp.py
+PYTHONPATH=. python examples/dapps/universal_dapp.py
 
 # Run Reflex DApp example
-cd examples/dapps/
-reflex run  # Assuming reflex_dapp.py is set up as Reflex app
+cd examples/dapps && PYTHONPATH=../.. reflex run
 ```
 
 ## Error Handling
@@ -949,7 +946,7 @@ reflex run  # Assuming reflex_dapp.py is set up as Reflex app
 ```bash
 # Enable debug logging
 export XIAN_WALLET_DEBUG=1
-python examples/wallets/desktop.py
+PYTHONPATH=. python examples/wallets/desktop.py
 
 # Or in code
 import logging
