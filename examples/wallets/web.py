@@ -1,5 +1,5 @@
 # examples/wallets/web.py
-# Requires: pip install flet>=0.28.3
+# Requires: pip install flet
 
 import flet as ft
 import threading
@@ -286,6 +286,6 @@ def main(page: ft.Page):
     )
 
 
-# Updated for Flet 0.28.3: Use ft.run with web view
+# Updated for older Flet versions: Use ft.app instead of ft.run
 if __name__ == "__main__":
-    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8080)
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
