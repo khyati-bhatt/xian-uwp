@@ -1,267 +1,304 @@
-#!/usr/bin/env python3
 """
-Test CORS functionality for web-based DApps
+Integration tests for CORS (Cross-Origin Resource Sharing) functionality.
+
+Tests verify that the Xian UWP server properly handles CORS requests
+from web-based DApps hosted on different domains.
 """
 
 import pytest
-import asyncio
-import httpx
 from fastapi.testclient import TestClient
 
-from xian_uwp.server import WalletProtocolServer
-from xian_uwp.models import WalletType, CORSConfig, Endpoints
+from xian_uwp import create_server, CORSConfig
+from xian_uwp.models import WalletType
 
 
 class TestCORSConfiguration:
-    """Test CORS configuration and functionality"""
-    
+    """Test CORS configuration classes and presets."""
+
+    @pytest.mark.unit
     def test_cors_config_development(self):
-        """Test development CORS configuration"""
+        """Test development CORS configuration."""
         config = CORSConfig.development()
         
         assert config.allow_origins == ["*"]
         assert config.allow_credentials is True
         assert "GET" in config.allow_methods
         assert "POST" in config.allow_methods
-        assert config.max_age == 3600
-    
+        assert "OPTIONS" in config.allow_methods
+
+    @pytest.mark.unit
     def test_cors_config_production(self):
-        """Test production CORS configuration"""
-        allowed_origins = ["https://mydapp.com", "https://app.mydapp.com"]
-        config = CORSConfig.production(allowed_origins)
+        """Test production CORS configuration."""
+        origins = ["https://mydapp.com", "https://app.mydapp.com"]
+        config = CORSConfig.production(origins)
         
-        assert config.allow_origins == allowed_origins
+        assert config.allow_origins == origins
         assert config.allow_credentials is True
-        assert "Authorization" in config.allow_headers
-        assert config.max_age == 86400
-    
+        assert "GET" in config.allow_methods
+        assert "POST" in config.allow_methods
+
+    @pytest.mark.unit
     def test_cors_config_localhost_dev(self):
-        """Test localhost development CORS configuration"""
+        """Test localhost development CORS configuration."""
         config = CORSConfig.localhost_dev()
         
-        # Should include common dev ports
+        # Should include common development ports
         assert "http://localhost:3000" in config.allow_origins
         assert "http://localhost:5173" in config.allow_origins
-        assert "http://localhost:51644" in config.allow_origins
-        assert "http://localhost:57158" in config.allow_origins
-        assert "http://127.0.0.1:3000" in config.allow_origins
+        assert "http://localhost:8080" in config.allow_origins
         
-        # Custom ports
-        custom_config = CORSConfig.localhost_dev([9000, 9001])
-        assert "http://localhost:9000" in custom_config.allow_origins
-        assert "http://localhost:9001" in custom_config.allow_origins
-    
+        # Should include 127.0.0.1 variants
+        assert "http://127.0.0.1:3000" in config.allow_origins
+        assert "http://127.0.0.1:8080" in config.allow_origins
+
+    @pytest.mark.unit
     def test_server_with_cors_config(self):
-        """Test server initialization with CORS config"""
-        cors_config = CORSConfig.development()
-        server = WalletProtocolServer(
+        """Test server creation with CORS configuration."""
+        cors_config = CORSConfig.production(["https://mydapp.com"])
+        server = create_server(
             wallet_type=WalletType.DESKTOP,
             cors_config=cors_config
         )
         
         assert server.cors_config == cors_config
-        assert server.cors_config.allow_origins == ["*"]
-    
+
+    @pytest.mark.unit
     def test_server_default_cors_config(self):
-        """Test server with default CORS config"""
-        server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
+        """Test server with default CORS configuration."""
+        server = create_server(wallet_type=WalletType.DESKTOP)
         
         # Should use localhost_dev by default
+        assert server.cors_config is not None
         assert "http://localhost:3000" in server.cors_config.allow_origins
-        assert "http://localhost:51644" in server.cors_config.allow_origins
 
 
 class TestCORSFunctionality:
-    """Test actual CORS functionality with HTTP requests"""
-    
+    """Test actual CORS functionality with HTTP requests."""
+
     @pytest.fixture
-    def server_app(self):
-        """Create server app for testing"""
-        cors_config = CORSConfig.development()
-        server = WalletProtocolServer(
-            wallet_type=WalletType.DESKTOP,
-            cors_config=cors_config
-        )
-        return server.app
-    
-    @pytest.fixture
-    def client(self, server_app):
-        """Create test client"""
-        return TestClient(server_app)
-    
-    def test_cors_preflight_request(self, client):
-        """Test CORS preflight OPTIONS request"""
-        response = client.options(
-            Endpoints.WALLET_STATUS,
-            headers={
-                "Origin": "http://localhost:3000",
-                "Access-Control-Request-Method": "GET",
-                "Access-Control-Request-Headers": "Authorization"
-            }
-        )
-        
-        assert response.status_code == 200
-        assert "Access-Control-Allow-Origin" in response.headers
-        assert "Access-Control-Allow-Methods" in response.headers
-        assert "Access-Control-Allow-Headers" in response.headers
-    
-    def test_cors_actual_request(self, client):
-        """Test actual request with CORS headers"""
-        response = client.get(
-            Endpoints.WALLET_STATUS,
-            headers={"Origin": "http://localhost:3000"}
-        )
-        
-        assert response.status_code == 200
-        assert "Access-Control-Allow-Origin" in response.headers
-        
-        # Check response content
-        data = response.json()
-        assert "available" in data
-        assert "locked" in data
-        assert "wallet_type" in data
-    
-    def test_cors_with_credentials(self, client):
-        """Test CORS with credentials"""
-        response = client.get(
-            Endpoints.WALLET_STATUS,
-            headers={
-                "Origin": "http://localhost:3000",
-                "Cookie": "session=test"
-            }
-        )
-        
-        assert response.status_code == 200
-        assert response.headers.get("Access-Control-Allow-Credentials") == "true"
-    
-    def test_cors_different_origins(self, client):
-        """Test CORS with different origins (development mode allows all)"""
-        origins = [
-            "http://localhost:3000",
-            "http://localhost:5173",
+    def cors_client(self, mock_wallet):
+        """Create a test client with CORS configuration."""
+        cors_config = CORSConfig.production([
             "https://mydapp.com",
-            "http://127.0.0.1:8080"
-        ]
+            "https://app.mydapp.com",
+            "http://localhost:3000"
+        ])
         
-        for origin in origins:
-            response = client.get(
-                Endpoints.WALLET_STATUS,
-                headers={"Origin": origin}
-            )
-            
-            assert response.status_code == 200
-            # In development mode, should allow all origins
-            assert response.headers.get("Access-Control-Allow-Origin") == "*"
-
-
-class TestCORSProduction:
-    """Test CORS in production-like scenarios"""
-    
-    def test_production_cors_specific_origins(self):
-        """Test production CORS with specific allowed origins"""
-        allowed_origins = ["https://mydapp.com", "https://app.mydapp.com"]
-        cors_config = CORSConfig.production(allowed_origins)
-        
-        server = WalletProtocolServer(
+        server = create_server(
             wallet_type=WalletType.DESKTOP,
             cors_config=cors_config
         )
+        server.wallet = mock_wallet
         
-        client = TestClient(server.app)
+        return TestClient(server.app)
+
+    @pytest.mark.integration
+    def test_cors_preflight_request(self, cors_client):
+        """Test CORS preflight (OPTIONS) request."""
+        response = cors_client.options(
+            "/api/v1/wallet/status",
+            headers={
+                "Origin": "https://mydapp.com",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Content-Type"
+            }
+        )
         
-        # Test allowed origin
-        response = client.get(
-            Endpoints.WALLET_STATUS,
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "https://mydapp.com"
+        assert "GET" in response.headers["access-control-allow-methods"]
+        assert response.headers["access-control-allow-credentials"] == "true"
+
+    @pytest.mark.integration
+    def test_cors_actual_request(self, cors_client):
+        """Test actual CORS request with proper headers."""
+        response = cors_client.get(
+            "/api/v1/wallet/status",
             headers={"Origin": "https://mydapp.com"}
         )
         
         assert response.status_code == 200
-        # Note: FastAPI's CORSMiddleware handles origin validation
-        # The actual origin echoing depends on the middleware implementation
-    
-    def test_production_cors_headers_restriction(self):
-        """Test production CORS with restricted headers"""
-        cors_config = CORSConfig.production(["https://mydapp.com"])
+        assert response.headers["access-control-allow-origin"] == "https://mydapp.com"
         
-        # Should have restricted headers compared to development
-        assert "Authorization" in cors_config.allow_headers
-        assert cors_config.allow_headers != ["*"]
-        assert cors_config.max_age == 86400  # 24 hours
+        data = response.json()
+        assert "available" in data
+
+    @pytest.mark.integration
+    def test_cors_with_credentials(self, cors_client):
+        """Test CORS request with credentials."""
+        response = cors_client.get(
+            "/api/v1/wallet/status",
+            headers={
+                "Origin": "https://mydapp.com",
+                "Cookie": "session=test_session"
+            }
+        )
+        
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-credentials"] == "true"
+
+    @pytest.mark.integration
+    def test_cors_different_origins(self, cors_client):
+        """Test CORS with different allowed origins."""
+        origins_to_test = [
+            "https://mydapp.com",
+            "https://app.mydapp.com",
+            "http://localhost:3000"
+        ]
+        
+        for origin in origins_to_test:
+            response = cors_client.get(
+                "/api/v1/wallet/status",
+                headers={"Origin": origin}
+            )
+            
+            assert response.status_code == 200
+            assert response.headers["access-control-allow-origin"] == origin
+
+    @pytest.mark.integration
+    def test_cors_blocked_origin(self, cors_client):
+        """Test that non-allowed origins are blocked."""
+        response = cors_client.get(
+            "/api/v1/wallet/status",
+            headers={"Origin": "https://malicious-site.com"}
+        )
+        
+        # Request succeeds but CORS headers are not set for blocked origin
+        assert response.status_code == 200
+        # CORS headers should not be set for disallowed origin
+        cors_origin = response.headers.get("access-control-allow-origin")
+        assert cors_origin != "https://malicious-site.com"
 
 
-def test_cors_with_async_client():
-    """Test CORS functionality with async HTTP client"""
-    cors_config = CORSConfig.localhost_dev()
-    server = WalletProtocolServer(
-        wallet_type=WalletType.DESKTOP,
-        cors_config=cors_config
-    )
-    
-    # Create test client
-    client = TestClient(server.app)
-    
-    # Test async-style request
-    response = client.get(
-        Endpoints.WALLET_STATUS,
-        headers={
-            "Origin": "http://localhost:3000",
-            "User-Agent": "Mozilla/5.0 (DApp Client)"
+class TestCORSProduction:
+    """Test production CORS scenarios."""
+
+    @pytest.mark.integration
+    def test_production_cors_specific_origins(self, mock_wallet):
+        """Test production CORS allows only specific origins."""
+        cors_config = CORSConfig.production(["https://mydapp.com"])
+        server = create_server(
+            wallet_type=WalletType.DESKTOP,
+            cors_config=cors_config
+        )
+        server.wallet = mock_wallet
+        
+        client = TestClient(server.app)
+        
+        # Allowed origin should work
+        response = client.get(
+            "/api/v1/wallet/status",
+            headers={"Origin": "https://mydapp.com"}
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "https://mydapp.com"
+        
+        # Disallowed origin should not get CORS headers
+        response = client.get(
+            "/api/v1/wallet/status",
+            headers={"Origin": "https://malicious-site.com"}
+        )
+        assert response.status_code == 200  # Request succeeds
+        # But CORS headers should not be set for disallowed origin
+        assert response.headers.get("access-control-allow-origin") != "https://malicious-site.com"
+
+    @pytest.mark.integration
+    def test_production_cors_headers_restriction(self, mock_wallet):
+        """Test production CORS header restrictions."""
+        cors_config = CORSConfig.production(["https://mydapp.com"])
+        server = create_server(
+            wallet_type=WalletType.DESKTOP,
+            cors_config=cors_config
+        )
+        server.wallet = mock_wallet
+        
+        client = TestClient(server.app)
+        
+        # Test preflight with allowed headers
+        response = client.options(
+            "/api/v1/wallet/status",
+            headers={
+                "Origin": "https://mydapp.com",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Content-Type, Authorization"
+            }
+        )
+        
+        assert response.status_code == 200
+        allowed_headers = response.headers["access-control-allow-headers"]
+        assert "Content-Type" in allowed_headers
+        assert "Authorization" in allowed_headers
+
+
+class TestCORSIntegration:
+    """Test complete CORS integration scenarios."""
+
+    @pytest.mark.integration
+    def test_server_hosted_dapp_scenario(self, mock_wallet):
+        """Test complete server-hosted DApp CORS scenario."""
+        dapp_origin = "https://my-awesome-dapp.vercel.app"
+        
+        # Configure wallet with CORS for DApp domain
+        cors_config = CORSConfig.production([dapp_origin])
+        server = create_server(
+            wallet_type=WalletType.DESKTOP,
+            cors_config=cors_config
+        )
+        server.wallet = mock_wallet
+        
+        client = TestClient(server.app)
+        
+        # DApp checks wallet availability
+        response = client.get(
+            "/api/v1/wallet/status",
+            headers={"Origin": dapp_origin}
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == dapp_origin
+        
+        # DApp requests authorization
+        auth_data = {
+            "app_name": "My Awesome DApp",
+            "app_url": dapp_origin,
+            "permissions": ["wallet_info", "balance"]
         }
-    )
-    
-    assert response.status_code == 200
-    assert "Access-Control-Allow-Origin" in response.headers
-    
-    data = response.json()
-    assert data["available"] is not None
-    assert data["wallet_type"] == "desktop"
+        
+        response = client.post(
+            "/api/v1/auth/request",
+            json=auth_data,
+            headers={"Origin": dapp_origin}
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == dapp_origin
+        
+        # Verify auth request was created
+        auth_response = response.json()
+        assert "request_id" in auth_response
+        assert auth_response["status"] == "pending"
 
-
-def test_cors_integration_example():
-    """Test CORS integration example for web DApps"""
-    # This simulates how a web DApp would be configured
-    
-    # 1. Create CORS config for development
-    cors_config = CORSConfig.localhost_dev([3000, 5173, 51644, 57158])
-    
-    # 2. Create server with CORS config
-    server = WalletProtocolServer(
-        wallet_type=WalletType.WEB,
-        cors_config=cors_config
-    )
-    
-    # 3. Verify configuration
-    assert "http://localhost:3000" in server.cors_config.allow_origins
-    assert "http://localhost:51644" in server.cors_config.allow_origins
-    assert server.cors_config.allow_credentials is True
-    
-    # 4. Test with client
-    client = TestClient(server.app)
-    
-    # Simulate web DApp request
-    response = client.get(
-        Endpoints.WALLET_STATUS,
-        headers={
-            "Origin": "http://localhost:3000",
-            "Referer": "http://localhost:3000/",
-            "User-Agent": "Mozilla/5.0 (Web DApp)"
-        }
-    )
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert data["wallet_type"] == "web"
-
-
-if __name__ == "__main__":
-    # Run basic tests
-    test_config = TestCORSConfiguration()
-    test_config.test_cors_config_development()
-    test_config.test_cors_config_localhost_dev()
-    print("✅ CORS configuration tests passed")
-    
-    # Run integration test
-    test_cors_integration_example()
-    print("✅ CORS integration test passed")
-    
-    print("🎉 All CORS tests completed successfully!")
+    @pytest.mark.integration
+    def test_development_cors_scenario(self, mock_wallet):
+        """Test development CORS scenario with localhost."""
+        cors_config = CORSConfig.localhost_dev()
+        server = create_server(
+            wallet_type=WalletType.DESKTOP,
+            cors_config=cors_config
+        )
+        server.wallet = mock_wallet
+        
+        client = TestClient(server.app)
+        
+        # Test common development origins
+        dev_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:8080"
+        ]
+        
+        for origin in dev_origins:
+            response = client.get(
+                "/api/v1/wallet/status",
+                headers={"Origin": origin}
+            )
+            assert response.status_code == 200
+            assert response.headers["access-control-allow-origin"] == origin
