@@ -23,7 +23,7 @@ pip install cryptography>=41.0.0  # Encrypted storage
 
 ```python
 # Synchronous client
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 client = XianWalletClientSync(
     app_name="My DApp",
@@ -35,7 +35,7 @@ if client.connect():
     print("Connected!")
 
 # Async client
-from protocol.client import XianWalletClient
+from xian_uwp.client import XianWalletClient
 import asyncio
 
 async def main():
@@ -85,8 +85,8 @@ asyncio.run(main())
 
 ```python
 # Desktop Wallet
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 
 server = WalletProtocolServer(
     wallet_type=WalletType.DESKTOP,
@@ -97,8 +97,8 @@ server.wallet = your_wallet_instance
 server.run()
 
 # Web Wallet (Flet-based)
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 import flet as ft
 
 server = WalletProtocolServer(WalletType.WEB)
@@ -143,18 +143,19 @@ const balance = await XianWalletUtils.getBalance("currency");
 ## 🧪 Quick Test
 
 ```python
-from protocol.utils import check_wallet_available_sync
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
-if check_wallet_available_sync():
-    client = XianWalletClientSync(
-        app_name="Test App",
-        app_url="http://localhost:3000"
-    )
+client = XianWalletClientSync(
+    app_name="Test App",
+    app_url="http://localhost:3000"
+)
+try:
     if client.connect(auto_approve=True):
         info = client.get_wallet_info()
         print(f"Connected to {info.wallet_type} wallet")
         print(f"Address: {info.address}")
+except Exception as e:
+    print(f"Connection failed: {e}")
 ```
 
 ## 🚨 Common Issues

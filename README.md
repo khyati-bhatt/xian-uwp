@@ -15,7 +15,7 @@ The Xian Universal Wallet Protocol provides a **unified interface** for all wall
 pip install -r requirements.txt
 
 # 2. Connect to any wallet
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 client = XianWalletClientSync("My DApp")
 client.connect()
@@ -32,8 +32,8 @@ balance = client.get_balance("currency")
 pip install -r requirements.txt
 
 # 2. Create protocol server
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 
 server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
 server.wallet = your_wallet_instance
@@ -99,8 +99,8 @@ POST /api/v1/sign                 # Sign message
 Desktop wallets run the protocol server directly in the application:
 
 ```python
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 
 # Create server instance
 server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
@@ -162,8 +162,8 @@ class CLIWalletDaemon:
 Web wallets run in the browser but use Python/Flet:
 
 ```python
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 import flet as ft
 
 # Create server instance  
@@ -196,7 +196,7 @@ ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
 DApps use the same client library regardless of wallet type:
 
 ```python
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 # Create client - works with any wallet type
 client = XianWalletClientSync(
@@ -518,7 +518,7 @@ pip install reflex>=0.8.6  # Required for Reflex examples
 
 ```
 xian-universal-wallet-protocol/
-├── protocol/
+├── xian_uwp/
 │   ├── __init__.py
 │   ├── models.py          # Data models & constants
 │   ├── server.py          # Universal protocol server  
@@ -532,12 +532,17 @@ xian-universal-wallet-protocol/
 │       ├── universal_dapp.py  # Flet DApp example (requires: flet)
 │       ├── reflex_dapp.py     # Reflex DApp example (requires: reflex)
 │       └── html-js-dapp/      # Pure HTML/JS DApp example (no dependencies)
+├── tests/                 # Test suite
+│   ├── test_simple.py     # Basic component tests
+│   ├── test_protocol.py   # Protocol integration tests
+│   ├── test_server.py     # Server functionality tests
+│   └── test_e2e.py        # End-to-end tests
 ├── requirements.txt       # Core protocol dependencies only
 └── README.md
 ```
 
 **Important Notes:**
-- **Core Protocol**: Only files in `protocol/` directory are the actual protocol implementation
+- **Core Protocol**: Only files in `xian_uwp/` directory are the actual protocol implementation
 - **Examples**: All files in `examples/` are reference implementations to learn from
 - **Dependencies**: `requirements.txt` contains only what's needed for the protocol itself
 - **Additional Dependencies**: Each example may require additional packages (noted above)
@@ -623,7 +628,7 @@ python -m http.server 8080
 # examples/dapps/universal_dapp.py
 # Requires: pip install flet>=0.28.3
 
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 class MyDApp:
     def __init__(self):
@@ -649,7 +654,7 @@ class MyDApp:
 # Requires: pip install reflex>=0.8.6
 
 import reflex as rx
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 class WalletState(rx.State):
     """Wallet DApp state with Reflex"""
@@ -759,8 +764,8 @@ XianWalletUtils.init().then(() => {
 ### Server Configuration
 
 ```python
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 
 # Create server with options
 server = WalletProtocolServer(
@@ -781,7 +786,7 @@ server.run(host="127.0.0.1", port=8546)
 ### Client Configuration
 
 ```python
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 # Create client with options
 client = XianWalletClientSync(
@@ -792,7 +797,7 @@ client = XianWalletClientSync(
 )
 
 # Async client with custom settings
-from protocol.client import XianWalletClient
+from xian_uwp.client import XianWalletClient
 
 async_client = XianWalletClient(
     app_name="My Async DApp",
@@ -876,7 +881,7 @@ python -m protocol.server
 ### Testing with the Client
 
 ```python
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 # Create client
 client = XianWalletClientSync("Test App")
@@ -895,7 +900,7 @@ if client.connect():
 
 ```python
 import asyncio
-from protocol.client import XianWalletClient
+from xian_uwp.client import XianWalletClient
 
 async def test_auth_flow():
     client = XianWalletClient("Test DApp")

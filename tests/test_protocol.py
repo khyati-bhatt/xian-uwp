@@ -7,9 +7,9 @@ import time
 import threading
 import subprocess
 import sys
-from protocol.server import WalletProtocolServer
-from protocol.client import XianWalletClientSync
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.client import XianWalletClientSync
+from xian_uwp.models import WalletType
 
 def test_protocol():
     """Test the protocol functionality"""

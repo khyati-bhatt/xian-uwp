@@ -3,7 +3,7 @@
 
 import reflex as rx
 from typing import Optional
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 
 # State is now a simple Python class (not Pydantic)

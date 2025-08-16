@@ -3,8 +3,8 @@
 Test server that starts unlocked
 """
 import asyncio
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 import hashlib

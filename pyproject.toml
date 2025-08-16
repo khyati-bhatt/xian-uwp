@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "xian-uwp"
 version = "0.1.0"
-description = ""
+description = "Xian Universal Wallet Protocol - A unified HTTP API interface for Xian wallets and DApps"
 authors = ["Endogen <endogen@xian.org>"]
 readme = "README.md"
+packages = [{include = "xian_uwp"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
