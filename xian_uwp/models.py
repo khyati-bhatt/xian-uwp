@@ -36,6 +36,14 @@ class Permission(str, Enum):
     ADD_TOKEN = "add_token"
 
 
+class AuthStatus(str, Enum):
+    """Authorization status states"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+
+
 # Request Models
 class AuthorizationRequest(BaseModel):
     """Authorization request from DApp"""
