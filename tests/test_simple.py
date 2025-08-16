@@ -62,7 +62,7 @@ class TestBasicComponents:
         client = XianWalletClientSync("Test App")
         
         assert client.client.app_name == "Test App"
-        assert client.client.server_url == "http://127.0.0.1:8545"
+        assert client.client.server_url == "http://localhost:8545"
         assert client.client.session_token is None
     
     @pytest.mark.unit

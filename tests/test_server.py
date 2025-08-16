@@ -100,7 +100,7 @@ class TestServerEndpoints:
     @pytest.mark.unit
     def test_balance_endpoint_unauthorized(self, test_client):
         """Test balance endpoint without authorization."""
-        response = test_client.get("/api/v1/wallet/balance/TAU")
+        response = test_client.get("/api/v1/balance/TAU")
         
         # Should require authorization
         assert response.status_code in [401, 403]

@@ -195,7 +195,48 @@ class WalletProtocolServer:
             cleanup_task = asyncio.create_task(self._cleanup_request(request_id))
             self.background_tasks.add(cleanup_task)
             
-            return {"request_id": request_id, "status": "pending"}
+            return {
+                "request_id": request_id, 
+                "status": "pending",
+                "app_name": request.app_name
+            }
+        
+        @app.get(Endpoints.AUTH_STATUS.replace("{request_id}", "{request_id}"))
+        async def get_auth_status(request_id: str):
+            """Get authorization request status"""
+            pending_request = self.pending_requests.get(request_id)
+            if not pending_request:
+                # Check if it was approved (in sessions)
+                for session in self.sessions.values():
+                    if session.request_id == request_id:
+                        return {"request_id": request_id, "status": "approved"}
+                
+                # Not found anywhere, might be denied or expired
+                raise HTTPException(status_code=404, detail="Request not found")
+            
+            return {
+                "request_id": request_id,
+                "status": "pending",
+                "app_name": pending_request.app_name,
+                "app_url": pending_request.app_url,
+                "permissions": pending_request.permissions,
+                "description": pending_request.description
+            }
+        
+        @app.get(Endpoints.AUTH_PENDING)
+        async def list_pending_requests():
+            """List all pending authorization requests"""
+            pending_list = []
+            for request_id, request in self.pending_requests.items():
+                pending_list.append({
+                    "request_id": request_id,
+                    "status": "pending",
+                    "app_name": request.app_name,
+                    "app_url": request.app_url,
+                    "permissions": request.permissions,
+                    "description": request.description
+                })
+            return {"pending_requests": pending_list}
         
         @app.post(Endpoints.AUTH_APPROVE.replace("{request_id}", "{request_id}"))
         async def approve_authorization(request_id: str):
@@ -215,7 +256,8 @@ class WalletProtocolServer:
                 permissions=pending_request.permissions,
                 created_at=datetime.now(),
                 expires_at=expires_at,
-                last_activity=datetime.now()
+                last_activity=datetime.now(),
+                request_id=request_id
             )
             
             self.sessions[session_token] = session
