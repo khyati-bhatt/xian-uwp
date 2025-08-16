@@ -24,27 +24,24 @@ class TestE2EProtocol:
         test_server.wallet = mock_wallet
         
         # Create client
-        client = XianWalletClientSync(
+        client = XianWalletClient(
             app_name="Test DApp",
             app_url="https://testdapp.com",
-            wallet_url=server_url
+            server_url=server_url
         )
         
         # 1. Check wallet availability
-        available = client.check_wallet_available()
+        available = await client.check_wallet_available()
         assert available is True
         
         # 2. Request authorization
-        auth_response = client.request_authorization([
+        auth_response = await client.request_authorization([
             Permission.WALLET_INFO,
             Permission.BALANCE
         ])
         
-        assert "request_id" in auth_response
-        assert auth_response["app_name"] == "Test DApp"
-        assert auth_response["status"] == "pending"
-        assert "wallet_info" in auth_response["permissions"]
-        assert "balance" in auth_response["permissions"]
+        assert "session_token" in auth_response
+        assert auth_response["status"] == "approved"
     
     @pytest.mark.e2e
     async def test_cors_enabled_dapp_flow(self, cors_test_server, mock_wallet):
@@ -98,9 +95,8 @@ class TestE2EProtocol:
         # Test authorization request
         auth_response = await client.request_authorization([Permission.WALLET_INFO])
         
-        assert "request_id" in auth_response
-        assert auth_response["app_name"] == "Async Test DApp"
-        assert auth_response["status"] == "pending"
+        assert "session_token" in auth_response
+        assert auth_response["status"] == "approved"
     
     @pytest.mark.e2e
     def test_client_error_handling(self):
@@ -162,20 +158,20 @@ class TestE2EIntegration:
         
         # Create multiple clients
         clients = [
-            XianWalletClientSync(f"DApp {i}", wallet_url=server_url)
+            XianWalletClient(f"DApp {i}", server_url=server_url)
             for i in range(3)
         ]
         
         # All clients should be able to check availability
         for client in clients:
-            available = client.check_wallet_available()
+            available = await client.check_wallet_available()
             assert available is True
         
         # All clients should be able to request authorization
         for i, client in enumerate(clients):
-            auth_response = client.request_authorization([Permission.WALLET_INFO])
-            assert auth_response["app_name"] == f"DApp {i}"
-            assert "request_id" in auth_response
+            auth_response = await client.request_authorization([Permission.WALLET_INFO])
+            assert "session_token" in auth_response
+            assert auth_response["status"] == "approved"
     
     @pytest.mark.e2e
     def test_protocol_backwards_compatibility(self, mock_wallet):

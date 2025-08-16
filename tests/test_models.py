@@ -156,18 +156,18 @@ class TestAuthorizationRequest:
         # Valid URL formats should work
         request = AuthorizationRequest(
             app_name="Test DApp",
-            app_url="not-a-url",  # URL validation is not strict in the model
+            app_url="https://valid-url.com",  # URL validation is strict in the model
             permissions=[Permission.WALLET_INFO]
         )
-        assert request.app_url == "not-a-url"
+        assert request.app_url == "https://valid-url.com"
         
-        # Empty permissions should be allowed
-        request = AuthorizationRequest(
-            app_name="Test DApp",
-            app_url="https://testdapp.com",
-            permissions=[]
-        )
-        assert request.permissions == []
+        # Empty permissions should raise validation error
+        with pytest.raises(ValidationError):
+            AuthorizationRequest(
+                app_name="Test DApp",
+                app_url="https://testdapp.com",
+                permissions=[]
+            )
     
     @pytest.mark.unit
     def test_auth_request_optional_fields(self):

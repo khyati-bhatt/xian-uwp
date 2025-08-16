@@ -4,10 +4,11 @@ Xian Wallet Protocol - Data Models
 Universal data models for all wallet implementations
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 from datetime import datetime
+import re
 
 
 class WalletType(str, Enum):
@@ -51,6 +52,34 @@ class AuthorizationRequest(BaseModel):
     app_url: str = Field(..., min_length=1, max_length=500)
     permissions: List[Permission]
     description: Optional[str] = Field(None, max_length=500)
+    
+    @validator('app_url')
+    def validate_url(cls, v):
+        """Validate URL format"""
+        url_pattern = re.compile(
+            r'^https?://'  # http:// or https://
+            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+            r'localhost|'  # localhost...
+            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+            r'(?::\d+)?'  # optional port
+            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+        if not url_pattern.match(v):
+            raise ValueError('Invalid URL format')
+        return v
+    
+    @validator('permissions')
+    def validate_permissions_not_empty(cls, v):
+        """Ensure permissions list is not empty and deduplicate"""
+        if not v:
+            raise ValueError('At least one permission is required')
+        # Deduplicate while preserving order
+        seen = set()
+        deduped = []
+        for perm in v:
+            if perm not in seen:
+                seen.add(perm)
+                deduped.append(perm)
+        return deduped
 
 
 class TransactionRequest(BaseModel):
@@ -150,6 +179,7 @@ class Session(BaseModel):
     created_at: datetime
     expires_at: datetime
     last_activity: datetime
+    request_id: Optional[str] = None
 
 
 class PendingRequest(BaseModel):
@@ -228,7 +258,7 @@ class CORSConfig(BaseModel):
 class ProtocolConfig:
     """Protocol configuration constants"""
     DEFAULT_PORT = 8545
-    DEFAULT_HOST = "127.0.0.1"
+    DEFAULT_HOST = "localhost"
     API_VERSION = "v1"
     PROTOCOL_VERSION = "1.0.0"
     SESSION_TIMEOUT_MINUTES = 60
@@ -242,6 +272,8 @@ class Endpoints:
     """API endpoint constants"""
     # Auth endpoints
     AUTH_REQUEST = "/api/v1/auth/request"
+    AUTH_STATUS = "/api/v1/auth/status/{request_id}"
+    AUTH_PENDING = "/api/v1/auth/pending"
     AUTH_APPROVE = "/api/v1/auth/approve/{request_id}"
     AUTH_DENY = "/api/v1/auth/deny/{request_id}"
     AUTH_REVOKE = "/api/v1/auth/revoke"
