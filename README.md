@@ -1,8 +1,42 @@
 # Xian Universal Wallet Protocol
 
+## What Can Use Xian-UWP?
+
+### 🔗 **Universal Compatibility Matrix**
+
+| Component | Technology | Location | Examples |
+|-----------|------------|----------|----------|
+| **Wallets** | Python | Local or Server | Desktop GUI, CLI daemon, Web wallet, Server wallet |
+| **DApps** | Any Language | Local or Server | React/Vue/Angular, Python/Flask, Node.js, Mobile apps, Desktop apps |
+
+### 🌐 **Real-World Scenarios**
+
+✅ **Local Python wallet** ↔ **Local Python DApp**  
+✅ **Local Python wallet** ↔ **Server-hosted React DApp** (via CORS)  
+✅ **Server Python wallet** ↔ **Any DApp anywhere** (via HTTP API)  
+✅ **Local Python wallet** ↔ **Mobile app** (React Native, Flutter, native)  
+✅ **Local Python wallet** ↔ **Desktop app** (Electron, Tauri, native)  
+
+### 🔑 **Key Benefits**
+
+- **Language Independent**: DApps can use any programming language that supports HTTP
+- **Deployment Flexible**: Wallets and DApps can run locally or on servers
+- **Technology Agnostic**: Works with any web framework, mobile framework, or desktop technology
+- **Universal Interface**: Same API for all wallet types and DApp types
+
+### ⚙️ **Technology Requirements**
+
+| Component | Requirements | Notes |
+|-----------|-------------|-------|
+| **Wallets** | Python 3.11+ | Must implement the protocol server |
+| **DApps** | HTTP client capability | Any language: Python, JavaScript, Go, Rust, Java, C#, etc. |
+| **Communication** | HTTP/JSON | Standard web protocols, CORS-enabled |
+
 ## Overview
 
-The Xian Universal Wallet Protocol provides a **unified interface** for all wallet types (desktop, CLI, web) to communicate with DApps. Every wallet exposes the same HTTP API on `localhost:8545`, making wallet integration **programming language independent** and **wallet type agnostic**.
+The Xian Universal Wallet Protocol provides a **unified HTTP API interface** that enables any DApp to communicate with any Xian wallet type through a standardized protocol. This eliminates the need for DApp developers to implement wallet-specific integrations and allows wallets to work with any DApp that supports the protocol.
+
+**Core Principle**: Every wallet exposes the same HTTP API on `localhost:8545`, making wallet integration **programming language independent** and **wallet type agnostic**.
 
 > **Important**: The default port `8545` was chosen to avoid conflicts with common development servers. If this port is already in use on your system, you can configure a different port when initializing the server.
 
@@ -42,28 +76,42 @@ server.run()  # Starts on localhost:8545
 
 ## Universal Protocol Architecture
 
+### 🏗️ **High-Level Architecture**
+
 ```
-┌─────────────────┐    HTTP API      ┌─────────────────┐
-│   Any DApp      │ ◄──────────────► │  Any Wallet     │
-│ (Python, JS,    │  localhost:8545  │ (Desktop, Web,  │
-│  etc.)          │                  │  CLI)           │
-└─────────────────┘                  └─────────────────┘
-         │                                    │
-         │                                    │
-         ▼                                    ▼
-┌─────────────────┐                  ┌─────────────────┐
-│ Universal       │                  │ Protocol Server │
-│ Client Library  │                  │ (Port 8545)     │
-└─────────────────┘                  └─────────────────┘
+┌─────────────────────────────────┐    HTTP API    ┌─────────────────────────────────┐
+│          Any DApp               │ ◄────────────► │         Any Wallet              │
+│                                 │                │                                 │
+│ • React/Vue/Angular (web)       │                │ • Desktop GUI (Python)         │
+│ • Python/Flask/Django (server) │                │ • CLI daemon (Python)          │
+│ • Node.js/Express (server)      │                │ • Web wallet (Python)          │
+│ • Mobile (React Native/Flutter) │                │ • Server wallet (Python)       │
+│ • Desktop (Electron/Tauri)      │                │                                 │
+│ • Any language with HTTP        │                │ Exposes: localhost:8545        │
+└─────────────────────────────────┘                └─────────────────────────────────┘
 ```
 
-### Key Benefits
+### 🔄 **Communication Flow**
 
-- **Universal Interface**: All wallets expose identical HTTP API
-- **Language Independent**: Works with any programming language
-- **Wallet Agnostic**: DApps work with desktop, web, or CLI wallets
-- **Drop-in Replacement**: Compatible with existing dapp-utils API
-- **Professional**: Session-based auth, caching, error handling
+```
+DApp (Any Technology)  →  HTTP Request   →  Wallet (Python)
+                      ←  JSON Response  ←
+```
+
+**Examples:**
+- React DApp on Vercel → CORS-enabled HTTP → Local Python wallet
+- Python Flask app → Direct HTTP → Server-hosted Python wallet  
+- Mobile app → HTTP API → User's local Python wallet
+- Electron desktop app → HTTP → Local Python wallet daemon
+
+### 🎯 **Protocol Benefits**
+
+- **Universal Interface**: All wallets expose identical HTTP API on port 8545
+- **Language Independent**: DApps can use any programming language that supports HTTP
+- **Deployment Flexible**: Both wallets and DApps can run locally or on servers
+- **Technology Agnostic**: Works with any web framework, mobile framework, or desktop technology
+- **CORS-Enabled**: Server-hosted DApps can connect to local wallets securely
+- **Professional Features**: Session-based auth, permission system, caching, error handling
 
 ## How the Protocol Works
 
