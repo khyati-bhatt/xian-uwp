@@ -9,10 +9,10 @@
 ## ⚡ Installation
 
 ```bash
-# Core protocol only
-pip install fastapi uvicorn httpx websockets pydantic xian-py
+# Core protocol
+pip install xian-uwp
 
-# Add as needed:
+# Add as needed for examples:
 pip install flet>=0.28.3          # Desktop wallets + Flet examples
 pip install reflex>=0.8.6         # Reflex DApp examples
 pip install click>=8.2.1          # CLI wallets  

@@ -12,7 +12,7 @@ The Xian Universal Wallet Protocol provides a **unified interface** for all wall
 
 ```python
 # 1. Install the protocol
-pip install -r requirements.txt
+pip install xian-uwp
 
 # 2. Connect to any wallet
 from xian_uwp.client import XianWalletClientSync
@@ -29,7 +29,7 @@ balance = client.get_balance("currency")
 
 ```python
 # 1. Install the protocol
-pip install -r requirements.txt
+pip install xian-uwp
 
 # 2. Create protocol server
 from xian_uwp.server import WalletProtocolServer
@@ -481,19 +481,21 @@ const ws = new WebSocket('ws://localhost:8545/ws/v1');
 
 ## Installation & Setup
 
-### 1. Install Core Protocol Dependencies
+### 1. Install Core Protocol
 
 ```bash
-pip install fastapi uvicorn httpx websockets pydantic xian-py
+pip install xian-uwp
 ```
 
-**Core Dependencies Explained:**
+**This installs all core dependencies:**
 - `fastapi` - HTTP API server framework
 - `uvicorn` - ASGI server to run FastAPI
 - `httpx` - Async HTTP client for wallet connections  
 - `websockets` - WebSocket support for real-time communication
 - `pydantic` - Data validation and serialization
 - `xian-py` - Xian blockchain SDK for wallet operations
+
+> **Note**: The PyPI package contains only the core protocol. To run the example wallets and DApps, you need to clone this repository and run them from source.
 
 ### 2. Optional Dependencies (Install as needed)
 
@@ -514,7 +516,35 @@ pip install flet>=0.28.3  # Required for Flet examples
 pip install reflex>=0.8.6  # Required for Reflex examples
 ```
 
-### 2. Project Structure
+### 2. Using in Your Own Projects
+
+After installing `pip install xian-uwp`, you can use the protocol in your own wallet or DApp:
+
+**For DApp Development:**
+```python
+from xian_uwp.client import XianWalletClientSync
+
+# Connect to any wallet
+client = XianWalletClientSync("My DApp")
+client.connect()
+
+# Use wallet functionality
+info = client.get_wallet_info()
+balance = client.get_balance("currency")
+```
+
+**For Wallet Development:**
+```python
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
+
+# Create protocol server
+server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
+server.wallet = your_wallet_instance
+server.run()  # Starts on localhost:8545
+```
+
+### 3. Project Structure
 
 ```
 xian-universal-wallet-protocol/
@@ -537,16 +567,14 @@ xian-universal-wallet-protocol/
 │   ├── test_protocol.py   # Protocol integration tests
 │   ├── test_server.py     # Server functionality tests
 │   └── test_e2e.py        # End-to-end tests
-├── requirements.txt       # Core protocol dependencies only
 └── README.md
 ```
 
 **Important Notes:**
 - **Core Protocol**: Only files in `xian_uwp/` directory are the actual protocol implementation
 - **Examples**: All files in `examples/` are reference implementations to learn from
-- **Dependencies**: `requirements.txt` contains only what's needed for the protocol itself
-- **Additional Dependencies**: Each example may require additional packages (noted above)
-- **PYTHONPATH**: Examples require `PYTHONPATH=.` to import the protocol modules correctly
+- **PyPI Package**: Install with `pip install xian-uwp` for production use
+- **Development**: When running examples from source, use `PYTHONPATH=.` to import the protocol modules correctly
 
 **Example Files Explained:**
 - `desktop.py` - Shows how to embed the protocol server in a desktop GUI application
@@ -556,56 +584,56 @@ xian-universal-wallet-protocol/
 - `reflex_dapp.py` - Sample DApp using the Reflex framework instead of Flet
 - `html-js-dapp/` - Pure HTML/JavaScript DApp example (no Python frameworks required)
 
-### 3. Run Desktop Wallet Example
+### 4. Run Desktop Wallet Example
 
 ```bash
-# Install desktop wallet dependencies
-pip install flet>=0.28.3
+# Install dependencies
+pip install xian-uwp flet>=0.28.3
 
-# Run desktop wallet example
+# Run desktop wallet example (requires source code)
 PYTHONPATH=. python examples/wallets/desktop.py
 ```
 
-### 4. Run Web Wallet Example
+### 5. Run Web Wallet Example
 
 ```bash
-# Install web wallet dependencies
-pip install flet>=0.28.3
+# Install dependencies
+pip install xian-uwp flet>=0.28.3
 
-# Run web wallet example (opens in browser)
+# Run web wallet example (opens in browser, requires source code)
 PYTHONPATH=. python examples/wallets/web.py
 ```
 
-### 5. Run CLI Wallet Example
+### 6. Run CLI Wallet Example
 
 ```bash
-# Install CLI wallet dependencies  
-pip install click>=8.2.1 cryptography>=41.0.0
+# Install dependencies
+pip install xian-uwp click>=8.2.1 cryptography>=41.0.0
 
-# Create wallet
+# Create wallet (requires source code)
 PYTHONPATH=. python examples/wallets/cli.py create
 
 # Start daemon
 PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
-### 6. Run DApp Examples
+### 7. Run DApp Examples
 
 **Flet DApp Example:**
 ```bash
-# Install Flet DApp dependencies
-pip install flet>=0.28.3
+# Install dependencies
+pip install xian-uwp flet>=0.28.3
 
-# Run Flet DApp example
+# Run Flet DApp example (requires source code)
 PYTHONPATH=. python examples/dapps/universal_dapp.py
 ```
 
 **Reflex DApp Example:**
 ```bash
-# Install Reflex DApp dependencies
-pip install reflex>=0.8.6
+# Install dependencies
+pip install xian-uwp reflex>=0.8.6
 
-# Run Reflex DApp example
+# Run Reflex DApp example (requires source code)
 cd examples/dapps && PYTHONPATH=../.. reflex run
 ```
 
