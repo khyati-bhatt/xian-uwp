@@ -24,8 +24,7 @@ class UniversalDApp:
             success = self.client.connect()
             if success:
                 self.wallet_info = self.client.get_wallet_info()
-                balance_info = self.client.get_balance("currency")
-                self.balance = balance_info.balance
+                self.balance = self.client.get_balance("currency")
                 self.is_connected = True
                 return True
             return False
@@ -55,8 +54,7 @@ class UniversalDApp:
 
             if result.success:
                 # Update balance after transaction
-                balance_info = self.client.get_balance("currency")
-                self.balance = balance_info.balance
+                self.balance = self.client.get_balance("currency")
 
             return {
                 "success": result.success,
@@ -72,11 +70,11 @@ class UniversalDApp:
             return {"success": False, "error": "Wallet not connected"}
 
         try:
-            result = self.client.sign_message(message)
+            signature = self.client.sign_message(message)
             return {
                 "success": True,
-                "signature": result.signature,
-                "signer": result.signer
+                "signature": signature,
+                "signer": self.wallet_info.address
             }
         except Exception as e:
             return {"success": False, "error": str(e)}

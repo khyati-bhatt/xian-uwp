@@ -27,7 +27,10 @@ class CLIWallet:
 
         # Generate key from password
         key = hashlib.sha256(password.encode()).digest()
-        fernet = Fernet(Fernet.generate_key())
+        # Use base64 encoding for Fernet key
+        import base64
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
 
         wallet_data = {
             "address": self.address,
@@ -37,7 +40,7 @@ class CLIWallet:
         encrypted_data = fernet.encrypt(json.dumps(wallet_data).encode())
 
         with open(WALLET_FILE, 'wb') as f:
-            f.write(fernet.key + encrypted_data)
+            f.write(encrypted_data)
 
     def load_encrypted(self, password: str) -> bool:
         """Load wallet from encrypted file"""
@@ -46,12 +49,15 @@ class CLIWallet:
 
         try:
             with open(WALLET_FILE, 'rb') as f:
-                data = f.read()
+                encrypted_data = f.read()
 
-            key = data[:44]  # Fernet key length
-            encrypted_data = data[44:]
-
-            fernet = Fernet(key)
+            # Generate key from password
+            key = hashlib.sha256(password.encode()).digest()
+            # Use base64 encoding for Fernet key
+            import base64
+            fernet_key = base64.urlsafe_b64encode(key)
+            fernet = Fernet(fernet_key)
+            
             decrypted_data = fernet.decrypt(encrypted_data)
             wallet_data = json.loads(decrypted_data.decode())
 

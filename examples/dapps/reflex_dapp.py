@@ -53,8 +53,7 @@ class WalletState(rx.State):
                 self.wallet_type = info.wallet_type
 
                 # Get balance
-                balance_info = self._client.get_balance("currency")
-                self.balance = balance_info.balance
+                self.balance = self._client.get_balance("currency")
 
                 self.transaction_result = "✅ Wallet connected successfully"
             else:
@@ -99,8 +98,7 @@ class WalletState(rx.State):
             if result.success:
                 self.transaction_result = f"✅ Transaction successful: {result.transaction_hash}"
                 # Update balance
-                balance_info = self._client.get_balance("currency")
-                self.balance = balance_info.balance
+                self.balance = self._client.get_balance("currency")
                 # Clear form
                 self.recipient = ""
                 self.amount = ""
@@ -255,8 +253,7 @@ app = rx.App(
         has_background=True,
         radius="medium",
         scaling="100%"
-    ),
-    disable_plugins=["reflex.plugins.sitemap.SitemapPlugin"]
+    )
 )
 
 # Add the page
