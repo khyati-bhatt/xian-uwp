@@ -82,12 +82,12 @@ server.run()  # Starts on localhost:8545
 ┌─────────────────────────────────┐    HTTP API    ┌─────────────────────────────────┐
 │          Any DApp               │ ◄────────────► │         Any Wallet              │
 │                                 │                │                                 │
-│ • React/Vue/Angular (web)       │                │ • Desktop GUI (Python)         │
-│ • Python/Flask/Django (server) │                │ • CLI daemon (Python)          │
-│ • Node.js/Express (server)      │                │ • Web wallet (Python)          │
-│ • Mobile (React Native/Flutter) │                │ • Server wallet (Python)       │
+│ • React/Vue/Angular (web)       │                │ • Desktop GUI (Python)          │
+│ • Python/Flask/Django (server)  │                │ • CLI daemon (Python)           │
+│ • Node.js/Express (server)      │                │ • Web wallet (Python)           │
+│ • Mobile (React Native/Flutter) │                │ • Server wallet (Python)        │
 │ • Desktop (Electron/Tauri)      │                │                                 │
-│ • Any language with HTTP        │                │ Exposes: localhost:8545        │
+│ • Any language with HTTP        │                │ Exposes: localhost:8545         │
 └─────────────────────────────────┘                └─────────────────────────────────┘
 ```
 
