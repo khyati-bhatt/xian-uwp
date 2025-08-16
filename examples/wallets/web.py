@@ -1,10 +1,8 @@
 # examples/wallets/web.py
-# Updated for Flet 0.28.3+ (fallback to older versions)
 # Requires: pip install flet
 
 import flet as ft
 import threading
-import asyncio
 from protocol.server import WalletProtocolServer
 from protocol.models import WalletType
 
