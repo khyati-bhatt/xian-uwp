@@ -111,6 +111,38 @@ PYTHONPATH=. python examples/wallets/cli.py create
 PYTHONPATH=. python examples/wallets/cli.py start
 ```
 
+## 🌐 CORS for Web DApps
+
+```python
+# Development - allows common dev ports
+from xian_uwp import create_server, CORSConfig
+
+server = create_server(cors_config=CORSConfig.localhost_dev())
+server.run()  # Allows localhost:3000, :5173, :8080, etc.
+
+# Production - specific origins only
+cors_config = CORSConfig.production(["https://mydapp.com"])
+server = create_server(cors_config=cors_config)
+server.run(host="0.0.0.0", port=8545)
+
+# Custom CORS
+cors_config = CORSConfig(
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    max_age=3600
+)
+```
+
+**JavaScript Integration:**
+```javascript
+const client = new XianWalletClient(
+    'My Web DApp',
+    window.location.origin,
+    'http://localhost:8545'
+);
+await client.connect();
+```
+
 ## 🔄 WebSocket Events
 
 ```python

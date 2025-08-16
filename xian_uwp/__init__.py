@@ -31,7 +31,8 @@ from .models import (
     # Configuration
     ProtocolConfig,
     Endpoints,
-    ErrorCodes
+    ErrorCodes,
+    CORSConfig
 )
 
 from .server import WalletProtocolServer
@@ -45,9 +46,12 @@ from .client import (
 )
 
 # Convenience functions
-def create_server(wallet_type: WalletType = WalletType.DESKTOP) -> WalletProtocolServer:
+def create_server(
+    wallet_type: WalletType = WalletType.DESKTOP,
+    cors_config: CORSConfig = None
+) -> WalletProtocolServer:
     """Create a wallet protocol server instance"""
-    return WalletProtocolServer(wallet_type=wallet_type)
+    return WalletProtocolServer(wallet_type=wallet_type, cors_config=cors_config)
 
 def create_dapp_client(
     app_name: str,
@@ -132,6 +136,7 @@ __all__ = [
     "ProtocolConfig",
     "Endpoints",
     "ErrorCodes",
+    "CORSConfig",
     
     # Factory functions
     "create_server",

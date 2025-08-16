@@ -155,6 +155,67 @@ class PendingRequest(BaseModel):
     status: str = "pending"
 
 
+# CORS Configuration
+class CORSConfig(BaseModel):
+    """CORS configuration for web-based DApps"""
+    allow_origins: List[str] = Field(default_factory=lambda: ["*"])
+    allow_credentials: bool = True
+    allow_methods: List[str] = Field(default_factory=lambda: ["*"])
+    allow_headers: List[str] = Field(default_factory=lambda: ["*"])
+    expose_headers: List[str] = Field(default_factory=list)
+    max_age: int = 600
+    
+    @classmethod
+    def development(cls) -> "CORSConfig":
+        """Development CORS configuration - allows all origins"""
+        return cls(
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["*"],
+            max_age=3600
+        )
+    
+    @classmethod
+    def production(cls, allowed_origins: List[str]) -> "CORSConfig":
+        """Production CORS configuration - specific origins only"""
+        return cls(
+            allow_origins=allowed_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Accept",
+                "Accept-Language",
+                "Content-Language",
+                "Content-Type",
+                "Authorization",
+                "X-Requested-With"
+            ],
+            expose_headers=["Content-Length", "Content-Type"],
+            max_age=86400  # 24 hours
+        )
+    
+    @classmethod
+    def localhost_dev(cls, ports: List[int] = None) -> "CORSConfig":
+        """Localhost development configuration for common dev server ports"""
+        if ports is None:
+            ports = [3000, 3001, 5000, 5173, 8000, 8080, 8081, 51644, 57158]
+        
+        origins = [f"http://localhost:{port}" for port in ports]
+        origins.extend([f"http://127.0.0.1:{port}" for port in ports])
+        origins.extend(["http://localhost", "http://127.0.0.1"])
+        
+        return cls(
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["*"],
+            max_age=3600
+        )
+
+
 # Protocol Constants
 class ProtocolConfig:
     """Protocol configuration constants"""

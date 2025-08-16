@@ -835,6 +835,56 @@ async_client = XianWalletClient(
 )
 ```
 
+### CORS Configuration
+
+For web-based DApps hosted on servers, the protocol includes comprehensive CORS support:
+
+```python
+from xian_uwp import create_server, CORSConfig
+
+# Development mode (default) - allows common dev ports
+server = create_server(cors_config=CORSConfig.localhost_dev())
+server.run()
+
+# Production mode - specific origins only
+cors_config = CORSConfig.production([
+    "https://mydapp.com",
+    "https://app.mydapp.com"
+])
+server = create_server(cors_config=cors_config)
+server.run(host="0.0.0.0", port=8545)  # Allow external connections
+
+# Custom CORS configuration
+cors_config = CORSConfig(
+    allow_origins=["http://localhost:3000", "https://mydapp.com"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=3600
+)
+server = create_server(cors_config=cors_config)
+```
+
+#### CORS Presets
+
+- **`CORSConfig.development()`**: Allows all origins (for development)
+- **`CORSConfig.localhost_dev()`**: Common dev ports (3000, 5173, 8080, etc.)
+- **`CORSConfig.production(origins)`**: Specific origins only (for production)
+
+#### Web DApp Integration
+
+```javascript
+// JavaScript client connecting to local wallet
+const client = new XianWalletClient(
+    'My Web DApp',
+    window.location.origin,  // Current web app origin
+    'http://localhost:8545'  // Local wallet server
+);
+
+await client.connect();
+const balance = await client.getBalance('currency');
+```
+
 ## Security Considerations
 
 ### Local-Only Communication

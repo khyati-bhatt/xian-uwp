@@ -39,7 +39,7 @@ PYTHONPATH=. python examples/wallets/web.py
 
 ### 2. Serve the HTML Files
 
-Since the JavaScript makes HTTP requests to `localhost:8545`, you need to serve the HTML files over HTTP (not file://) to avoid CORS issues.
+Since the JavaScript makes HTTP requests to `localhost:8545`, you need to serve the HTML files over HTTP (not file://) to avoid CORS issues. The wallet server is configured with CORS support for common development ports.
 
 #### Option A: Python HTTP Server
 ```bash
@@ -57,6 +57,19 @@ npx http-server -p 8080 -c-1
 ```bash
 cd examples/dapps/html-js-dapp
 php -S localhost:8080
+```
+
+#### Option D: Use Provided Ports (Recommended)
+The wallet server is pre-configured for these development ports:
+```bash
+# Port 3000 (React/Next.js default)
+python -m http.server 3000
+
+# Port 5173 (Vite default)
+python -m http.server 5173
+
+# Port 51644 or 57158 (OpenHands environment)
+python -m http.server 51644
 ```
 
 ### 3. Open in Browser
@@ -213,12 +226,52 @@ Tested browsers:
 - Safari 13+
 - Edge 80+
 
+## CORS Configuration
+
+The Xian Universal Wallet Protocol includes comprehensive CORS support for web-based DApps:
+
+### Development Mode (Default)
+The wallet server uses `CORSConfig.localhost_dev()` by default, which allows:
+- Common development ports: 3000, 3001, 5000, 5173, 8000, 8080, 8081
+- OpenHands environment ports: 51644, 57158
+- Both `localhost` and `127.0.0.1` origins
+
+### Production Mode
+For production deployments, configure specific origins:
+```python
+from xian_uwp import create_server, CORSConfig
+
+# Production CORS configuration
+cors_config = CORSConfig.production([
+    "https://mydapp.com",
+    "https://app.mydapp.com"
+])
+
+server = create_server(cors_config=cors_config)
+server.run(host="0.0.0.0", port=8545)
+```
+
+### Custom CORS Configuration
+```python
+from xian_uwp import CORSConfig
+
+# Custom configuration
+cors_config = CORSConfig(
+    allow_origins=["http://localhost:3000", "https://mydapp.com"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=3600
+)
+```
+
 ## Security Considerations
 
 - **HTTPS in Production**: Use HTTPS for production deployments
 - **Input Validation**: Always validate user inputs before sending to wallet
 - **Session Management**: Session tokens are stored in memory only
-- **CORS**: Wallet server allows localhost connections for development
+- **CORS Origins**: Configure specific origins in production, avoid wildcards
+- **Origin Validation**: The wallet server validates request origins against allowed list
 
 ## Troubleshooting
 
