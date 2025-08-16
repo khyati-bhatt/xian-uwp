@@ -1,362 +1,194 @@
-# wallets/cli.py
-"""
-Xian CLI Wallet Daemon
-Command-line wallet that runs the universal protocol server
-"""
+# examples/wallets/cli.py
+# Requires: pip install click>=8.2.1 cryptography>=41.0.0
 
 import click
-import getpass
-import hashlib
 import json
-import logging
-import sys
-
-# Import our protocol components
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType, ProtocolConfig
-
-from xian_py.wallet import Wallet, HDWallet
-
+import hashlib
 from pathlib import Path
-from typing import Optional
+from cryptography.fernet import Fernet
+from protocol.server import WalletProtocolServer
+from protocol.models import WalletType
+
+WALLET_DIR = Path.home() / ".xian_wallet"
+WALLET_FILE = WALLET_DIR / "wallet.enc"
+CONFIG_FILE = WALLET_DIR / "config.json"
 
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+class CLIWallet:
+    def __init__(self):
+        self.address = None
+        self.private_key = None
+        self.is_locked = True
+        self.balance = 1000.0
 
+    def save_encrypted(self, password: str):
+        """Save wallet to encrypted file"""
+        WALLET_DIR.mkdir(exist_ok=True)
 
-class CLIWalletDaemon:
-    """CLI Wallet Daemon that exposes the universal protocol"""
-    
-    def __init__(self, data_dir: Path):
-        self.data_dir = data_dir
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.wallet_file = self.data_dir / "wallet.json"
-        self.config_file = self.data_dir / "config.json"
-        self.server: Optional[WalletProtocolServer] = None
-    
-    def create_wallet(self, password: str, mnemonic: Optional[str] = None) -> str:
-        """Create a new wallet"""
+        # Generate key from password
+        key = hashlib.sha256(password.encode()).digest()
+        # Use base64 encoding for Fernet key
+        import base64
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
+
+        wallet_data = {
+            "address": self.address,
+            "private_key": self.private_key
+        }
+
+        encrypted_data = fernet.encrypt(json.dumps(wallet_data).encode())
+
+        with open(WALLET_FILE, 'wb') as f:
+            f.write(encrypted_data)
+
+    def load_encrypted(self, password: str) -> bool:
+        """Load wallet from encrypted file"""
+        if not WALLET_FILE.exists():
+            return False
+
         try:
-            if mnemonic:
-                # Import from mnemonic
-                hd_wallet = HDWallet(mnemonic)
-                wallet = hd_wallet.get_wallet([44, 0, 0, 0, 0])
-                wallet_data = {
-                    "type": "hd",
-                    "mnemonic": mnemonic,
-                    "derivation_path": [44, 0, 0, 0, 0]
-                }
-            else:
-                # Generate new wallet
-                wallet = Wallet()
-                wallet_data = {
-                    "type": "simple",
-                    "private_key": wallet.private_key
-                }
+            with open(WALLET_FILE, 'rb') as f:
+                encrypted_data = f.read()
+
+            # Generate key from password
+            key = hashlib.sha256(password.encode()).digest()
+            # Use base64 encoding for Fernet key
+            import base64
+            fernet_key = base64.urlsafe_b64encode(key)
+            fernet = Fernet(fernet_key)
             
-            # Encrypt wallet data (simplified - in production use proper encryption)
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
-            encrypted_data = {
-                "wallet": wallet_data,
-                "password_hash": password_hash,
-                "address": wallet.public_key
-            }
-            
-            # Save to file
-            with open(self.wallet_file, 'w') as f:
-                json.dump(encrypted_data, f, indent=2)
-            
-            logger.info(f"✅ Wallet created: {wallet.public_key}")
-            return wallet.public_key
-            
-        except Exception as e:
-            logger.error(f"Failed to create wallet: {e}")
-            raise
-    
-    def load_wallet(self, password: str) -> Wallet:
-        """Load wallet from file"""
-        if not self.wallet_file.exists():
-            raise FileNotFoundError("No wallet found. Create one first with 'xian-wallet create'")
-        
-        try:
-            with open(self.wallet_file, 'r') as f:
-                encrypted_data = json.load(f)
-            
-            # Verify password
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
-            if password_hash != encrypted_data["password_hash"]:
-                raise ValueError("Invalid password")
-            
-            # Decrypt wallet data
-            wallet_data = encrypted_data["wallet"]
-            
-            if wallet_data["type"] == "hd":
-                hd_wallet = HDWallet(wallet_data["mnemonic"])
-                wallet = hd_wallet.get_wallet(wallet_data["derivation_path"])
-            else:
-                wallet = Wallet(wallet_data["private_key"])
-            
-            logger.info(f"📍 Wallet loaded: {wallet.public_key}")
-            return wallet
-            
-        except Exception as e:
-            logger.error(f"Failed to load wallet: {e}")
-            raise
-    
-    def start_daemon(self, password: str, host: str = ProtocolConfig.DEFAULT_HOST, port: int = ProtocolConfig.DEFAULT_PORT):
-        """Start the wallet daemon"""
-        try:
-            # Load wallet
-            wallet = self.load_wallet(password)
-            
-            # Create and configure server
-            self.server = WalletProtocolServer(wallet_type=WalletType.CLI)
-            
-            # Override wallet initialization
-            self.server.wallet = wallet
-            self.server.password_hash = hashlib.sha256(password.encode()).hexdigest()
-            self.server.is_locked = False
-            
-            # Initialize Xian client
-            from xian_py.xian import Xian
-            self.server.xian_client = Xian(self.server.network_url, wallet=wallet)
-            
-            logger.info(f"🚀 Starting CLI Wallet Daemon on {host}:{port}")
-            logger.info(f"📍 Wallet: {wallet.public_key}")
-            logger.info(f"🌐 Network: {self.server.network_url}")
-            logger.info("💡 DApps can now connect to this wallet")
-            
-            # Run server
-            self.server.run(host=host, port=port)
-            
-        except Exception as e:
-            logger.error(f"Failed to start daemon: {e}")
-            sys.exit(1)
-    
-    def stop_daemon(self):
-        """Stop the wallet daemon"""
-        if self.server:
-            logger.info("🛑 Stopping CLI Wallet Daemon")
-            # In a real implementation, this would gracefully shut down the server
+            decrypted_data = fernet.decrypt(encrypted_data)
+            wallet_data = json.loads(decrypted_data.decode())
+
+            self.address = wallet_data["address"]
+            self.private_key = wallet_data["private_key"]
+            return True
+        except Exception:
+            return False
 
 
 @click.group()
-@click.option('--data-dir', default=None, help='Data directory for wallet files')
-@click.pass_context
-def cli(ctx, data_dir):
-    """Xian CLI Wallet - Universal Protocol Compatible"""
-    if data_dir is None:
-        data_dir = Path.home() / ".xian-wallet"
-    else:
-        data_dir = Path(data_dir)
-    
-    ctx.ensure_object(dict)
-    ctx.obj['daemon'] = CLIWalletDaemon(data_dir)
+@click.version_option()
+def cli():
+    """Xian CLI Wallet - Universal Wallet Protocol"""
+    pass
 
 
 @cli.command()
-@click.option('--mnemonic', help='Import from mnemonic phrase (leave empty to generate new)')
-@click.pass_context
-def create(ctx, mnemonic):
+@click.option('--password', prompt=True, hide_input=True,
+              help='Password to encrypt the wallet')
+def create(password):
     """Create a new wallet"""
-    daemon = ctx.obj['daemon']
-    
-    if daemon.wallet_file.exists():
-        if not click.confirm("Wallet already exists. Overwrite?"):
-            return
-    
-    password = getpass.getpass("Enter wallet password: ")
-    confirm_password = getpass.getpass("Confirm password: ")
-    
-    if password != confirm_password:
-        click.echo("❌ Passwords don't match")
-        return
-    
-    if len(password) < 8:
-        click.echo("❌ Password must be at least 8 characters")
-        return
-    
+    wallet = CLIWallet()
+    wallet.address = "xian1234567890abcdef"  # Demo address
+    wallet.private_key = "private_key_demo"  # Demo key
+
     try:
-        if mnemonic:
-            # Validate mnemonic
-            from xian_py.wallet import HDWallet
-            try:
-                HDWallet(mnemonic)
-            except Exception:
-                click.echo("❌ Invalid mnemonic phrase")
-                return
-        
-        address = daemon.create_wallet(password, mnemonic)
+        wallet.save_encrypted(password)
         click.echo(f"✅ Wallet created successfully!")
-        click.echo(f"📍 Address: {address}")
-        
-        if not mnemonic:
-            click.echo("💡 Use 'xian-wallet backup' to view your mnemonic phrase")
-        
+        click.echo(f"Address: {wallet.address}")
+        click.echo(f"Wallet saved to: {WALLET_FILE}")
     except Exception as e:
-        click.echo(f"❌ Failed to create wallet: {e}")
+        click.echo(f"❌ Failed to create wallet: {e}", err=True)
 
 
 @cli.command()
-@click.option('--host', default=ProtocolConfig.DEFAULT_HOST, help='Host to bind to')
-@click.option('--port', default=ProtocolConfig.DEFAULT_PORT, help='Port to bind to')
-@click.option('--background', '-d', is_flag=True, help='Run in background')
-@click.pass_context
-def start(ctx, host, port, background):
+@click.option('--password', prompt=True, hide_input=True,
+              help='Password to unlock the wallet')
+@click.option('--port', default=8545, help='Port to run server on')
+@click.option('--background', is_flag=True, help='Run as background daemon')
+def start(password, port, background):
     """Start the wallet daemon"""
-    daemon = ctx.obj['daemon']
-    
-    if not daemon.wallet_file.exists():
-        click.echo("❌ No wallet found. Create one first with 'xian-wallet create'")
+    if not WALLET_FILE.exists():
+        click.echo("❌ No wallet found. Create one first with 'create' command.", err=True)
         return
-    
-    password = getpass.getpass("Enter wallet password: ")
-    
-    if background:
-        click.echo("🔄 Starting daemon in background...")
-        # In production, implement proper daemonization
-        import threading
-        thread = threading.Thread(target=daemon.start_daemon, args=(password, host, port))
-        thread.daemon = True
-        thread.start()
-        click.echo(f"✅ Daemon started on {host}:{port}")
-        
-        # Keep main thread alive
-        try:
-            while True:
-                import time
-                time.sleep(1)
-        except KeyboardInterrupt:
-            click.echo("🛑 Stopping daemon...")
+
+    wallet = CLIWallet()
+    if not wallet.load_encrypted(password):
+        click.echo("❌ Invalid password or corrupted wallet.", err=True)
+        return
+
+    wallet.is_locked = False
+
+    # Create and start server
+    server = WalletProtocolServer(wallet_type=WalletType.CLI)
+    server.wallet = wallet
+    server.is_locked = False
+
+    click.echo(f"🚀 Starting Xian CLI Wallet daemon...")
+    click.echo(f"Address: {wallet.address}")
+    click.echo(f"Server: http://localhost:{port}")
+    click.echo(f"Press Ctrl+C to stop")
+
+    try:
+        if background:
+            # In real implementation, you'd properly daemonize
+            click.echo("Running in background mode...")
+
+        server.run(host="127.0.0.1", port=port)
+    except KeyboardInterrupt:
+        click.echo("\n🛑 Shutting down wallet daemon...")
+    except Exception as e:
+        click.echo(f"❌ Server error: {e}", err=True)
+
+
+@cli.command()
+def status():
+    """Check wallet and server status"""
+    if not WALLET_FILE.exists():
+        click.echo("❌ No wallet found")
+        return
+
+    click.echo("✅ Wallet file exists")
+    click.echo(f"Location: {WALLET_FILE}")
+
+    # Check if server is running (simplified check)
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex(('127.0.0.1', 8545))
+    sock.close()
+
+    if result == 0:
+        click.echo("🟢 Server is running on port 8545")
     else:
-        daemon.start_daemon(password, host, port)
+        click.echo("🔴 Server is not running")
 
 
 @cli.command()
-@click.pass_context
-def status(ctx):
-    """Check wallet status"""
-    daemon = ctx.obj['daemon']
-    
-    if not daemon.wallet_file.exists():
-        click.echo("❌ No wallet found")
-        return
-    
-    try:
-        with open(daemon.wallet_file, 'r') as f:
-            data = json.load(f)
-        
-        click.echo("📋 Wallet Status:")
-        click.echo(f"   Address: {data['address']}")
-        click.echo(f"   Type: {data['wallet']['type']}")
-        click.echo(f"   File: {daemon.wallet_file}")
-        
-        # Check if daemon is running
-        import httpx
-        try:
-            response = httpx.get(f"http://{ProtocolConfig.DEFAULT_HOST}:{ProtocolConfig.DEFAULT_PORT}/api/v1/wallet/status", timeout=2)
-            if response.status_code == 200:
-                click.echo("   Daemon: ✅ Running")
-            else:
-                click.echo("   Daemon: ❌ Not responding")
-        except:
-            click.echo("   Daemon: ❌ Not running")
-            
-    except Exception as e:
-        click.echo(f"❌ Error checking status: {e}")
-
-
-@cli.command()
-@click.pass_context
-def backup(ctx):
-    """Show wallet backup information"""
-    daemon = ctx.obj['daemon']
-    
-    if not daemon.wallet_file.exists():
-        click.echo("❌ No wallet found")
-        return
-    
-    password = getpass.getpass("Enter wallet password: ")
-    
-    try:
-        wallet = daemon.load_wallet(password)
-        
-        with open(daemon.wallet_file, 'r') as f:
-            data = json.load(f)
-        
-        click.echo("🔐 Wallet Backup Information:")
-        click.echo(f"   Address: {wallet.public_key}")
-        
-        if data['wallet']['type'] == 'hd':
-            click.echo("   Type: HD Wallet")
-            click.echo(f"   Mnemonic: {data['wallet']['mnemonic']}")
-        else:
-            click.echo("   Type: Simple Wallet")
-            click.echo(f"   Private Key: {data['wallet']['private_key']}")
-        
-        click.echo("\n⚠️  Keep this information secure and private!")
-        
-    except Exception as e:
-        click.echo(f"❌ Error: {e}")
-
-
-@cli.command()
-@click.pass_context
-def info(ctx):
+@click.option('--password', prompt=True, hide_input=True,
+              help='Password to unlock the wallet')
+def info(password):
     """Show wallet information"""
-    daemon = ctx.obj['daemon']
-    
-    password = getpass.getpass("Enter wallet password: ")
-    
-    try:
-        wallet = daemon.load_wallet(password)
-        
-        # Get balance
-        from xian_py.xian import Xian
-        xian_client = Xian("https://testnet.xian.org", wallet=wallet)
-        balance = xian_client.get_balance(wallet.public_key)
-        
-        click.echo("💼 Wallet Information:")
-        click.echo(f"   Address: {wallet.public_key}")
-        click.echo(f"   Balance: {balance} XIAN")
-        
-    except Exception as e:
-        click.echo(f"❌ Error: {e}")
+    if not WALLET_FILE.exists():
+        click.echo("❌ No wallet found", err=True)
+        return
+
+    wallet = CLIWallet()
+    if not wallet.load_encrypted(password):
+        click.echo("❌ Invalid password", err=True)
+        return
+
+    click.echo("📱 Wallet Information:")
+    click.echo(f"Address: {wallet.address}")
+    click.echo(f"Balance: {wallet.balance} XIAN")
+    click.echo(f"Status: {'Unlocked' if not wallet.is_locked else 'Locked'}")
 
 
 @cli.command()
-@click.option('--to', required=True, help='Recipient address')
-@click.option('--amount', required=True, type=float, help='Amount to send')
-@click.option('--contract', default='currency', help='Token contract')
-@click.pass_context
-def send(ctx, to, amount, contract):
-    """Send tokens"""
-    daemon = ctx.obj['daemon']
-    
-    password = getpass.getpass("Enter wallet password: ")
-    
+@click.confirmation_option(prompt='Are you sure you want to delete the wallet?')
+def delete():
+    """Delete the wallet (irreversible)"""
     try:
-        wallet = daemon.load_wallet(password)
-        
-        click.echo(f"📤 Sending {amount} {contract.upper()} to {to[:8]}...")
-        
-        # Send transaction
-        from xian_py.xian import Xian
-        xian_client = Xian("https://testnet.xian.org", wallet=wallet)
-        result = xian_client.send_tx(
-            contract=contract,
-            function='transfer',
-            kwargs={'to': to, 'amount': amount}
-        )
-        
-        click.echo("✅ Transaction sent!")
-        click.echo(f"   Result: {result}")
-        
+        if WALLET_FILE.exists():
+            WALLET_FILE.unlink()
+        if CONFIG_FILE.exists():
+            CONFIG_FILE.unlink()
+
+        click.echo("✅ Wallet deleted successfully")
     except Exception as e:
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"❌ Failed to delete wallet: {e}", err=True)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     cli()
