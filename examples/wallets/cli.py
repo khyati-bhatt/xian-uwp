@@ -6,8 +6,8 @@ import json
 import hashlib
 from pathlib import Path
 from cryptography.fernet import Fernet
-from protocol.server import WalletProtocolServer
-from protocol.models import WalletType
+from xian_uwp.server import WalletProtocolServer
+from xian_uwp.models import WalletType
 
 WALLET_DIR = Path.home() / ".xian_wallet"
 WALLET_FILE = WALLET_DIR / "wallet.enc"

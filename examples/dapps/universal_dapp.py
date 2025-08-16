@@ -2,7 +2,7 @@
 # Requires: pip install flet>=0.28.3
 
 import flet as ft
-from protocol.client import XianWalletClientSync
+from xian_uwp.client import XianWalletClientSync
 
 
 class UniversalDApp:

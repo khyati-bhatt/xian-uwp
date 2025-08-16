@@ -5,7 +5,7 @@ Simple test to verify protocol components
 import asyncio
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
-from protocol.models import WalletInfo, BalanceResponse, TransactionRequest, SignMessageRequest
+from xian_uwp.models import WalletInfo, BalanceResponse, TransactionRequest, SignMessageRequest
 
 async def test_components():
     print("🧪 Testing Protocol Components\n")
