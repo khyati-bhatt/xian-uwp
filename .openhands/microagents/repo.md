@@ -19,23 +19,27 @@ Key benefits:
 
 ### Installation
 ```bash
-# Core protocol
-pip install fastapi uvicorn httpx websockets pydantic xian-py
+# Core protocol (PyPI package)
+pip install xian-uwp
 
 # Example dependencies (as needed)
 pip install flet>=0.28.3 reflex>=0.8.6 click>=8.2.1 cryptography>=41.0.0
 ```
 
 ### Running Examples
-All examples require `PYTHONPATH=.` to import protocol modules:
+Examples require source code and `PYTHONPATH=.` to import protocol modules:
 ```bash
+# Install PyPI package first
+pip install xian-uwp
+
+# Then run examples from source
 PYTHONPATH=. python examples/wallets/cli.py create
 PYTHONPATH=. python examples/dapps/universal_dapp.py
 ```
 
 ## Repository Structure
 
-### Core Protocol (`/protocol/`)
+### Core Protocol (`/xian_uwp/`)
 - **`models.py`**: Pydantic data models, enums (WalletType, Permission, etc.), request/response schemas
 - **`server.py`**: FastAPI-based HTTP server that wallets implement to expose the universal API
 - **`client.py`**: Client library for DApps to connect to any wallet (sync/async versions)
@@ -55,7 +59,6 @@ PYTHONPATH=. python examples/dapps/universal_dapp.py
 
 ### Configuration & Documentation
 - **`pyproject.toml`**: Poetry project configuration with core dependencies
-- **`requirements.txt`**: Pip requirements file
 - **`README.md`**: Complete documentation with architecture, API reference, examples
 - **`QUICK_REFERENCE.md`**: Developer cheat sheet with essential commands and patterns
 
