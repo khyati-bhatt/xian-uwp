@@ -350,7 +350,11 @@ class WalletProtocolServer:
                 return cached_data
             
             try:
-                balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
+                if self.xian_client:
+                    balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
+                else:
+                    # Return demo balance when no blockchain client is configured
+                    balance = 100.0
                 response = BalanceResponse(balance=balance, contract=contract)
                 self._set_cache(cache_key, response)
                 return response
