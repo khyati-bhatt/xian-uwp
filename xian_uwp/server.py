@@ -9,6 +9,7 @@ import hashlib
 import secrets
 import logging
 import uvicorn
+import threading
 
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set
@@ -48,6 +49,9 @@ class WalletProtocolServer:
         chain_id: Optional[str] = None
     ):
         self.wallet_type = wallet_type
+        self.uvicorn_server = None
+        self.server_task = None
+        self.is_running = False
         self.wallet: Optional[Wallet] = None
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
@@ -554,14 +558,69 @@ class WalletProtocolServer:
         port: int = ProtocolConfig.DEFAULT_PORT,
         allow_any_host: bool = False
     ):
-        """Run the server"""
+        """Run the server (blocking call)"""
         # Allow binding to any host for web deployment scenarios
         if allow_any_host:
             host = "0.0.0.0"
         
         logger.info(f"🌐 Starting server on {host}:{port}")
         logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
-        uvicorn.run(self.app, host=host, port=port, log_level="info")
+        
+        # Create uvicorn server instance for proper shutdown control
+        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        self.uvicorn_server = uvicorn.Server(config)
+        self.is_running = True
+        
+        # Run the server (blocking)
+        self.uvicorn_server.run()
+        
+    async def start_async(
+        self,
+        host: str = ProtocolConfig.DEFAULT_HOST,
+        port: int = ProtocolConfig.DEFAULT_PORT,
+        allow_any_host: bool = False
+    ):
+        """Start the server asynchronously"""
+        if allow_any_host:
+            host = "0.0.0.0"
+            
+        logger.info(f"🌐 Starting server on {host}:{port}")
+        logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
+        
+        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        self.uvicorn_server = uvicorn.Server(config)
+        self.is_running = True
+        
+        # Start server in background task
+        self.server_task = asyncio.create_task(self.uvicorn_server.serve())
+        
+    async def stop_async(self):
+        """Stop the server asynchronously"""
+        if self.uvicorn_server and self.is_running:
+            logger.info("🛑 Stopping server...")
+            self.is_running = False
+            self.uvicorn_server.should_exit = True
+            
+            if self.server_task:
+                self.server_task.cancel()
+                try:
+                    await self.server_task
+                except asyncio.CancelledError:
+                    pass
+                    
+            logger.info("✅ Server stopped")
+            
+    def stop(self):
+        """Stop the server (synchronous wrapper)"""
+        if self.uvicorn_server and self.is_running:
+            logger.info("🛑 Stopping server...")
+            self.is_running = False
+            self.uvicorn_server.should_exit = True
+            logger.info("✅ Server stop requested")
+            
+    def is_server_running(self):
+        """Check if server is currently running"""
+        return self.is_running and self.uvicorn_server is not None
 
 
 def create_server(

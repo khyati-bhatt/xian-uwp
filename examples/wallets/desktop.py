@@ -53,6 +53,10 @@ class DesktopWallet:
         if len(self.wallet_address) > 16:
             return f"{self.wallet_address[:8]}...{self.wallet_address[-8:]}"
         return self.wallet_address
+        
+    def is_server_running(self):
+        """Check if server is currently running"""
+        return self.server and self.server.is_server_running()
 
 
 def main(page: ft.Page):
@@ -147,17 +151,27 @@ def main(page: ft.Page):
             show_error(f"Failed to start server: {str(e)}")
 
     def stop_server():
-        """Stop the server (note: uvicorn server will continue running in background)"""
-        # Note: Properly stopping uvicorn server requires more complex implementation
-        # For demo purposes, we just update the UI and clear references
-        wallet.server = None
-        wallet.server_thread = None
-        
-        server_status.value = "Server: Stopped (process may still be running)"
-        server_status.color = ft.Colors.RED_700
-        start_server_btn.visible = True
-        stop_server_btn.visible = False
-        page.update()
+        """Stop the server properly"""
+        try:
+            if wallet.server:
+                # Stop the server properly
+                wallet.server.stop()
+                
+                # Wait a moment for server to stop
+                import time
+                time.sleep(1)
+                
+            # Clear references
+            wallet.server = None
+            wallet.server_thread = None
+
+            server_status.value = "Server: Stopped"
+            server_status.color = ft.Colors.RED_700
+            start_server_btn.visible = True
+            stop_server_btn.visible = False
+            page.update()
+        except Exception as e:
+            show_error(f"Error stopping server: {str(e)}")
 
     def show_error(message):
         page.snack_bar = ft.SnackBar(
