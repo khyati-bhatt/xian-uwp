@@ -28,8 +28,7 @@ class MockWallet:
         self.locked = False
         self.balance = {"currency": 1000.0}
         self.address = "test_address_123"
-        self.network = "https://testnet.xian.org"
-        self.chain_id = "xian-testnet"
+        # Network configuration removed - should be set by tests when needed
     
     def is_locked(self) -> bool:
         return self.locked

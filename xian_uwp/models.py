@@ -114,8 +114,8 @@ class WalletInfo(BaseModel):
     address: str
     truncated_address: str
     locked: bool
-    chain_id: str
-    network: str
+    chain_id: Optional[str] = None
+    network: Optional[str] = None
     wallet_type: WalletType
     version: str = "1.0.0"
 
@@ -164,8 +164,8 @@ class StatusResponse(BaseModel):
     available: bool
     locked: bool
     wallet_type: WalletType
-    network: str
-    chain_id: str
+    network: Optional[str] = None
+    chain_id: Optional[str] = None
     version: str
 
 

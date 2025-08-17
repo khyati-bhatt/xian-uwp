@@ -90,11 +90,11 @@ from xian_uwp.models import WalletType
 
 server = WalletProtocolServer(
     wallet_type=WalletType.DESKTOP,
-    host="127.0.0.1",
-    port=8545  # Default port - all wallets use same port
+    network_url="https://testnet.xian.org",  # Optional: configure network
+    chain_id="xian-testnet"                  # Optional: configure chain
 )
 server.wallet = your_wallet_instance
-server.run()
+server.run()  # Default: host="127.0.0.1", port=8545
 
 # Web Wallet (Flet-based)
 from xian_uwp.server import WalletProtocolServer
@@ -102,6 +102,7 @@ from xian_uwp.models import WalletType
 import flet as ft
 
 server = WalletProtocolServer(WalletType.WEB)
+server.configure_network("https://testnet.xian.org", "xian-testnet")  # Configure after creation
 server.wallet = your_wallet_instance
 # Run server in background + Flet web UI
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
@@ -109,6 +110,27 @@ ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
 # CLI Wallet
 PYTHONPATH=. python examples/wallets/cli.py create
 PYTHONPATH=. python examples/wallets/cli.py start
+```
+
+## ⚙️ Network Configuration
+
+```python
+# Network configuration is now optional and configurable
+from xian_uwp.server import WalletProtocolServer
+
+# Option 1: Configure during creation
+server = WalletProtocolServer(
+    wallet_type=WalletType.DESKTOP,
+    network_url="https://mainnet.xian.org",
+    chain_id="xian-mainnet"
+)
+
+# Option 2: Configure after creation
+server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
+server.configure_network("https://testnet.xian.org", "xian-testnet")
+
+# Network configuration is required for transaction functionality
+# Status and wallet info endpoints work without network configuration
 ```
 
 ## 🌐 CORS for Web DApps

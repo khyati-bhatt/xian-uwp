@@ -851,9 +851,16 @@ server = WalletProtocolServer(
     max_sessions=10         # Max concurrent sessions (default: 100)
 )
 
-# Custom network configuration
-server.network_url = "https://mainnet.xian.org"
-server.chain_id = "xian-mainnet"
+# Network configuration (required for transaction functionality)
+# Option 1: Set during server creation
+server = WalletProtocolServer(
+    wallet_type=WalletType.DESKTOP,
+    network_url="https://mainnet.xian.org",
+    chain_id="xian-mainnet"
+)
+
+# Option 2: Configure after creation
+server.configure_network("https://mainnet.xian.org", "xian-mainnet")
 
 # Run on custom port
 server.run(host="127.0.0.1", port=8546)

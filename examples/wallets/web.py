@@ -15,11 +15,13 @@ class WebWallet:
         self.wallet_address = "xian5678...efgh"
         self.is_locked = True
         self.balance = 2500.0
-        self.network = "https://testnet.xian.org"
+        # Network configuration removed - should be set by user
 
     def start_server(self):
         """Start the protocol server in background thread"""
         self.server = WalletProtocolServer(wallet_type=WalletType.WEB)
+        # Network configuration should be set by the application using this wallet
+        # Example: self.server.configure_network("https://testnet.xian.org", "xian-testnet")
         self.server.wallet = self
         self.server.is_locked = self.is_locked
 
