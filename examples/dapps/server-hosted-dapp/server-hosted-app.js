@@ -124,8 +124,8 @@ class ServerHostedDApp {
             
             this.logMessage('Requesting wallet connection...', 'info');
             
-            // Connect to wallet
-            await this.client.connect();
+            // Connect to wallet (auto-approve for demo purposes)
+            await this.client.connect(true);
             
             this.connected = true;
             this.updateConnectionStatus('connected', 'Connected');
