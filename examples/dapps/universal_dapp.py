@@ -19,7 +19,7 @@ class UniversalDApp:
             self.client = XianWalletClientSync(
                 app_name="Universal DApp Demo",
                 app_url="http://localhost:8080",
-                permissions=["wallet_info", "balance", "transactions", "sign_message"]
+                permissions=["wallet_info", "balance"]
             )
 
             success = self.client.connect()
@@ -40,45 +40,16 @@ class UniversalDApp:
         self.wallet_info = None
         self.balance = 0.0
 
-    def send_transaction(self, recipient, amount):
-        """Send a transaction"""
-        if not self.is_connected or not self.client:
-            return {"success": False, "error": "Wallet not connected"}
-
-        try:
-            result = self.client.send_transaction(
-                contract="currency",
-                function="transfer",
-                kwargs={"to": recipient, "amount": float(amount)},
-                stamps_supplied=50000
-            )
-
-            if result.success:
-                # Update balance after transaction
+    def refresh_balance(self):
+        """Refresh balance from wallet"""
+        if self.is_connected and self.client:
+            try:
                 self.balance = self.client.get_balance("currency")
-
-            return {
-                "success": result.success,
-                "hash": result.transaction_hash if result.success else None,
-                "error": result.errors if not result.success else None
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def sign_message(self, message):
-        """Sign a message"""
-        if not self.is_connected or not self.client:
-            return {"success": False, "error": "Wallet not connected"}
-
-        try:
-            signature = self.client.sign_message(message)
-            return {
-                "success": True,
-                "signature": signature,
-                "signer": self.wallet_info.address
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+                return True
+            except Exception as e:
+                print(f"Error refreshing balance: {e}")
+                return False
+        return False
 
 
 def main(page: ft.Page):
@@ -109,28 +80,6 @@ def main(page: ft.Page):
         border_radius=10,
         bgcolor=ft.Colors.GREY_50,
         visible=False
-    )
-
-    # Transaction form
-    recipient_field = ft.TextField(
-        label="Recipient Address",
-        width=400,
-        border_color=ft.Colors.BLUE_400
-    )
-
-    amount_field = ft.TextField(
-        label="Amount (XIAN)",
-        width=200,
-        border_color=ft.Colors.BLUE_400
-    )
-
-    # Message signing
-    message_field = ft.TextField(
-        label="Message to Sign",
-        width=400,
-        multiline=True,
-        max_lines=3,
-        border_color=ft.Colors.PURPLE_400
     )
 
     # Results area
@@ -169,7 +118,14 @@ def main(page: ft.Page):
                 ft.Text(f"Full Address: {dapp.wallet_info.address}", size=12, color=ft.Colors.GREY_600),
                 ft.Text(f"Type: {dapp.wallet_info.wallet_type.title()}", size=14),
                 ft.Text(f"Balance: {dapp.balance} XIAN", size=16, color=ft.Colors.GREEN_700, weight=ft.FontWeight.BOLD),
-                ft.Text(f"Network: {dapp.wallet_info.network}", size=12, color=ft.Colors.GREY_600),
+                ft.Text(f"Locked: {'Yes' if dapp.wallet_info.locked else 'No'}", size=14),
+                ft.ElevatedButton(
+                    "Refresh Balance",
+                    on_click=lambda _: refresh_balance_click(),
+                    bgcolor=ft.Colors.BLUE_400,
+                    color=ft.Colors.WHITE,
+                    width=150
+                )
             ], spacing=5)
             wallet_details.bgcolor = ft.Colors.BLUE_50
             wallet_details.visible = True
@@ -208,53 +164,20 @@ def main(page: ft.Page):
 
         page.update()
 
-    def send_transaction_click():
-        if not recipient_field.value or not amount_field.value:
-            show_notification("Please fill in recipient and amount", error=True)
-            return
-
-        results_text.value = "Sending transaction..."
-        page.update()
-
-        result = dapp.send_transaction(recipient_field.value, amount_field.value)
-
-        if result["success"]:
-            results_text.value = f"✅ Transaction successful!\nHash: {result['hash']}\nNew Balance: {dapp.balance} XIAN"
-            results_text.color = ft.Colors.GREEN_700
-            recipient_field.value = ""
-            amount_field.value = ""
-
+    def refresh_balance_click():
+        """Refresh balance from wallet"""
+        if dapp.refresh_balance():
             # Update balance display
-            if wallet_details.visible:
+            if wallet_details.visible and wallet_details.content:
                 wallet_details.content.controls[4].value = f"Balance: {dapp.balance} XIAN"
-
-            show_notification("Transaction sent successfully!")
-        else:
-            results_text.value = f"❌ Transaction failed: {result['error']}"
-            results_text.color = ft.Colors.RED_700
-            show_notification("Transaction failed", error=True)
-
-        page.update()
-
-    def sign_message_click():
-        if not message_field.value:
-            show_notification("Please enter a message to sign", error=True)
-            return
-
-        results_text.value = "Signing message..."
-        page.update()
-
-        result = dapp.sign_message(message_field.value)
-
-        if result["success"]:
-            results_text.value = f"✅ Message signed!\nSignature: {result['signature'][:50]}...\nSigner: {result['signer']}"
+            results_text.value = f"✅ Balance refreshed: {dapp.balance} XIAN"
             results_text.color = ft.Colors.GREEN_700
-            show_notification("Message signed successfully!")
+            show_notification("Balance refreshed!")
         else:
-            results_text.value = f"❌ Signing failed: {result['error']}"
+            results_text.value = "❌ Failed to refresh balance"
             results_text.color = ft.Colors.RED_700
-            show_notification("Signing failed", error=True)
-
+            show_notification("Failed to refresh balance", error=True)
+        
         page.update()
 
     # Buttons
@@ -283,7 +206,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Column([
                         ft.Text("Universal Xian DApp", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ft.Text("Works with Desktop, CLI, and Web wallets", size=14, color=ft.Colors.WHITE70)
+                        ft.Text("Connect to any Xian wallet and view your address & balance", size=14, color=ft.Colors.WHITE70)
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     bgcolor=ft.Colors.BLUE_600,
                     padding=20,
@@ -303,46 +226,10 @@ def main(page: ft.Page):
 
                 ft.Divider(),
 
-                # Transaction section
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Send Transaction", size=20, weight=ft.FontWeight.BOLD),
-                        ft.Row([recipient_field, amount_field], spacing=20),
-                        ft.ElevatedButton(
-                            "Send Transaction",
-                            on_click=lambda _: send_transaction_click(),
-                            bgcolor=ft.Colors.GREEN_400,
-                            color=ft.Colors.WHITE,
-                            disabled=not dapp.is_connected
-                        )
-                    ], spacing=15),
-                    padding=20
-                ),
-
-                ft.Divider(),
-
-                # Message signing section
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Sign Message", size=20, weight=ft.FontWeight.BOLD),
-                        message_field,
-                        ft.ElevatedButton(
-                            "Sign Message",
-                            on_click=lambda _: sign_message_click(),
-                            bgcolor=ft.Colors.PURPLE_400,
-                            color=ft.Colors.WHITE,
-                            disabled=not dapp.is_connected
-                        )
-                    ], spacing=15),
-                    padding=20
-                ),
-
-                ft.Divider(),
-
                 # Results section
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("Results", size=18, weight=ft.FontWeight.BOLD),
+                        ft.Text("Status", size=18, weight=ft.FontWeight.BOLD),
                         ft.Container(
                             content=results_text,
                             padding=15,

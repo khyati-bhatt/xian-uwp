@@ -12,6 +12,7 @@ from xian_uwp.models import WalletType
 class DesktopWallet:
     def __init__(self):
         self.server = None
+        self.server_thread = None
         self.wallet_address = "Not initialized"
         self.is_locked = True
         self.balance = 0.0
@@ -26,8 +27,8 @@ class DesktopWallet:
             def run_server():
                 self.server.run(host="127.0.0.1", port=8545)
 
-            server_thread = threading.Thread(target=run_server, daemon=True)
-            server_thread.start()
+            self.server_thread = threading.Thread(target=run_server, daemon=True)
+            self.server_thread.start()
             
             # Wait a moment for server to initialize, then update UI with real wallet data
             import time
@@ -145,8 +146,13 @@ def main(page: ft.Page):
             show_error(f"Failed to start server: {str(e)}")
 
     def stop_server():
-        # In real implementation, you'd stop the server here
-        server_status.value = "Server: Stopped"
+        """Stop the server (note: uvicorn server will continue running in background)"""
+        # Note: Properly stopping uvicorn server requires more complex implementation
+        # For demo purposes, we just update the UI and clear references
+        wallet.server = None
+        wallet.server_thread = None
+        
+        server_status.value = "Server: Stopped (process may still be running)"
         server_status.color = ft.Colors.RED_700
         start_server_btn.visible = True
         stop_server_btn.visible = False

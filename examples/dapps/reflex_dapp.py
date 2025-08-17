@@ -17,17 +17,14 @@ class WalletState(rx.State):
     truncated_address: str = ""
     wallet_type: str = ""
 
-    # Transaction state
-    recipient: str = ""
-    amount: str = ""
-    transaction_result: str = ""
-
     # Balance
     balance: float = 0.0
+    
+    # Status message
+    status_message: str = "Ready to connect..."
 
     # Loading states
     connecting: bool = False
-    sending: bool = False
 
     def __init__(self):
         super().__init__()
@@ -42,7 +39,7 @@ class WalletState(rx.State):
             self._client = XianWalletClientSync(
                 app_name="Reflex DApp Example",
                 app_url="http://localhost:3000",
-                permissions=["wallet_info", "balance", "transactions"]
+                permissions=["wallet_info", "balance"]
             )
 
             success = self._client.connect()
@@ -56,11 +53,11 @@ class WalletState(rx.State):
                 # Get balance
                 self.balance = self._client.get_balance("currency")
 
-                self.transaction_result = "✅ Wallet connected successfully"
+                self.status_message = "✅ Wallet connected successfully"
             else:
-                self.transaction_result = "❌ Failed to connect to wallet"
+                self.status_message = "❌ Failed to connect to wallet"
         except Exception as e:
-            self.transaction_result = f"❌ Connection error: {str(e)}"
+            self.status_message = f"❌ Connection error: {str(e)}"
         finally:
             self.connecting = False
 
@@ -72,51 +69,15 @@ class WalletState(rx.State):
         self.wallet_type = ""
         self.balance = 0.0
         self._client = None
-        self.transaction_result = "Wallet disconnected"
+        self.status_message = "Wallet disconnected"
 
-    def send_transaction(self):
-        """Send a transaction"""
-        if not self.is_connected or not self._client:
-            self.transaction_result = "❌ Wallet not connected"
-            return
-
-        if not self.recipient or not self.amount:
-            self.transaction_result = "❌ Please fill in recipient and amount"
-            return
-
-        self.sending = True
-        yield  # Update UI to show loading
-
-        try:
-            amount_val = float(self.amount)
-            result = self._client.send_transaction(
-                contract="currency",
-                function="transfer",
-                kwargs={"to": self.recipient, "amount": amount_val},
-                stamps_supplied=50000
-            )
-
-            if result.success:
-                self.transaction_result = f"✅ Transaction successful: {result.transaction_hash}"
-                # Update balance
+    def refresh_balance(self):
+        """Refresh balance from wallet"""
+        if self.is_connected and self._client:
+            try:
                 self.balance = self._client.get_balance("currency")
-                # Clear form
-                self.recipient = ""
-                self.amount = ""
-            else:
-                self.transaction_result = f"❌ Transaction failed: {result.errors}"
-        except ValueError:
-            self.transaction_result = "❌ Invalid amount"
-        except Exception as e:
-            self.transaction_result = f"❌ Transaction error: {str(e)}"
-        finally:
-            self.sending = False
-
-    def set_recipient(self, value: str):
-        self.recipient = value
-
-    def set_amount(self, value: str):
-        self.amount = value
+            except Exception as e:
+                print(f"Error refreshing balance: {e}")
 
 
 def wallet_connection_card() -> rx.Component:
@@ -157,37 +118,30 @@ def wallet_connection_card() -> rx.Component:
     )
 
 
-def transaction_card() -> rx.Component:
-    """Transaction form card"""
+def balance_card() -> rx.Component:
+    """Balance display and refresh card"""
     return rx.card(
         rx.vstack(
-            rx.heading("Send Transaction", size="4"),
+            rx.heading("Wallet Balance", size="4"),
             rx.cond(
                 WalletState.is_connected,
                 rx.vstack(
-                    rx.input(
-                        placeholder="Recipient address",
-                        value=WalletState.recipient,
-                        on_change=WalletState.set_recipient,
-                        width="100%"
-                    ),
-                    rx.input(
-                        placeholder="Amount",
-                        value=WalletState.amount,
-                        on_change=WalletState.set_amount,
-                        width="100%"
+                    rx.text(
+                        f"{WalletState.balance} XIAN",
+                        size="6",
+                        weight="bold",
+                        color="green"
                     ),
                     rx.button(
-                        "Send Transaction",
-                        on_click=WalletState.send_transaction,
-                        loading=WalletState.sending,
-                        color_scheme="green",
+                        "Refresh Balance",
+                        on_click=WalletState.refresh_balance,
+                        color_scheme="blue",
                         size="3",
                         width="100%"
                     ),
                     spacing="3"
                 ),
-                rx.text("Connect wallet to send transactions", color="gray")
+                rx.text("Connect wallet to view balance", color="gray")
             ),
             spacing="3"
         ),
@@ -202,8 +156,8 @@ def status_card() -> rx.Component:
         rx.vstack(
             rx.heading("Status", size="4"),
             rx.cond(
-                WalletState.transaction_result != "",
-                rx.text(WalletState.transaction_result),
+                WalletState.status_message != "",
+                rx.text(WalletState.status_message),
                 rx.text("Ready", color="gray")
             ),
             spacing="2"
@@ -224,14 +178,14 @@ def index() -> rx.Component:
                 margin_bottom="2rem"
             ),
             rx.text(
-                "This DApp works with Desktop, CLI, and Web wallets",
+                "Connect to any Xian wallet and view your address & balance",
                 text_align="center",
                 color="gray",
                 margin_bottom="2rem"
             ),
             rx.hstack(
                 wallet_connection_card(),
-                transaction_card(),
+                balance_card(),
                 spacing="4",
                 wrap="wrap",
                 justify="center"
