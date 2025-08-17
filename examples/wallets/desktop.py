@@ -15,7 +15,7 @@ class DesktopWallet:
         self.server_thread = None
         self.wallet_address = "Not initialized"
         self.is_locked = True
-        self.balance = 0.0
+        self.balance = 100.0  # Set demo balance from start for consistency
 
     def start_server(self):
         """Start the protocol server in background thread"""
@@ -45,7 +45,8 @@ class DesktopWallet:
         if self.server and self.server.wallet:
             self.wallet_address = self.server.wallet.public_key
             # Set a demo balance for consistency (no real blockchain needed)
-            self.balance = 100.0 if not self.is_locked else 0.0
+            # Balance should be the same whether locked or unlocked
+            self.balance = 100.0
         
     def get_truncated_address(self):
         """Get truncated address for display"""

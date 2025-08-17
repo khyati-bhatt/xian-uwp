@@ -294,7 +294,9 @@ class WalletProtocolServer:
         @app.get(Endpoints.WALLET_INFO, response_model=WalletInfo)
         async def get_wallet_info(_: Session = Depends(require_permission(Permission.WALLET_INFO))):
             """Get wallet information"""
-            check_wallet_unlocked()
+            # Wallet info should be available even when locked - only check wallet exists
+            if not self.wallet:
+                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
             
             cache_key = "wallet_info"
             cached_data = self._get_cached(cache_key, ttl_seconds=60)
@@ -341,7 +343,9 @@ class WalletProtocolServer:
         @app.get(Endpoints.BALANCE.replace("{contract}", "{contract}"), response_model=BalanceResponse)
         async def get_balance(contract: str, _: Session = Depends(require_permission(Permission.BALANCE))):
             """Get token balance"""
-            check_wallet_unlocked()
+            # Balance should be available even when locked - only check wallet exists
+            if not self.wallet:
+                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
             
             cache_key = f"balance_{contract}_{self.wallet.public_key}"
             cached_data = self._get_cached(cache_key, ttl_seconds=10)
