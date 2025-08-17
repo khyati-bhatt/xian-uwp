@@ -56,9 +56,20 @@ class DesktopWallet:
             self.server_thread = threading.Thread(target=run_server, daemon=True)
             self.server_thread.start()
             
-            # Wait a moment for server to initialize, then update UI with real wallet data
+            # Wait for server to be ready, then update UI with real wallet data
             import time
-            time.sleep(2)  # Give server more time to initialize with async approach
+            import requests
+            
+            # Wait for server to be ready (up to 5 seconds)
+            for i in range(10):
+                try:
+                    response = requests.get('http://localhost:8545/api/v1/wallet/status', timeout=1)
+                    if response.status_code == 200:
+                        break
+                except:
+                    pass
+                time.sleep(0.5)
+            
             self.update_wallet_info()
         except Exception as e:
             print(f"Failed to start server: {e}")

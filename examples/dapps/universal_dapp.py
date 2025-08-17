@@ -28,9 +28,15 @@ class UniversalDApp:
                 self.balance = self.client.get_balance("currency")
                 self.is_connected = True
                 return True
+            else:
+                print("❌ Failed to connect to wallet - make sure a wallet is running on localhost:8545")
+                return False
+        except ConnectionError as e:
+            print(f"❌ Connection error: No wallet found on localhost:8545")
+            print("   Make sure to start a wallet (desktop, CLI, or web) first!")
             return False
         except Exception as e:
-            print(f"Connection error: {e}")
+            print(f"❌ Unexpected error: {e}")
             return False
 
     def disconnect_wallet(self):
