@@ -179,6 +179,14 @@ class WebDAppState(rx.State):
     def clear_error(self):
         """Clear error message"""
         self.error_message = ""
+    
+    def set_recipient(self, value: str):
+        """Set recipient address"""
+        self.recipient = value
+    
+    def set_amount(self, value: str):
+        """Set transaction amount"""
+        self.amount = value
 
 
 def connection_card() -> rx.Component:

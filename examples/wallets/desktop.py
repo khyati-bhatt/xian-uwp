@@ -12,14 +12,19 @@ from xian_uwp.models import WalletType
 class DesktopWallet:
     def __init__(self):
         self.server = None
-        self.wallet_address = "xian1234...abcd"
+        self.wallet_address = "Not initialized"
         self.is_locked = True
-        self.balance = 1000.0
+        self.balance = 0.0
+        self.network_url = "https://testnet.xian.org"
+        self.chain_id = "xian-testnet-1"
 
     def start_server(self):
         """Start the protocol server in background thread"""
-        self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
-        self.server.wallet = self  # Set wallet instance
+        self.server = WalletProtocolServer(
+            wallet_type=WalletType.DESKTOP,
+            network_url=self.network_url,
+            chain_id=self.chain_id
+        )
         self.server.is_locked = self.is_locked
 
         # Run server in background thread
@@ -28,6 +33,29 @@ class DesktopWallet:
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
+        
+        # Wait a moment for server to initialize, then update UI with real wallet data
+        import time
+        time.sleep(1)  # Give server time to initialize
+        self.update_wallet_info()
+
+    def update_wallet_info(self):
+        """Update wallet info from the server's wallet instance"""
+        if self.server and self.server.wallet:
+            self.wallet_address = self.server.wallet.public_key
+            # Try to get balance if wallet is unlocked and network is available
+            if not self.is_locked and self.server.xian_client:
+                try:
+                    self.balance = self.server.xian_client.get_balance(self.wallet_address, contract="currency")
+                except Exception as e:
+                    print(f"Could not fetch balance: {e}")
+                    self.balance = 0.0
+        
+    def get_truncated_address(self):
+        """Get truncated address for display"""
+        if len(self.wallet_address) > 16:
+            return f"{self.wallet_address[:8]}...{self.wallet_address[-8:]}"
+        return self.wallet_address
 
 
 def main(page: ft.Page):
@@ -42,14 +70,14 @@ def main(page: ft.Page):
 
     # UI State
     password_field = ft.TextField(
-        label="Password",
+        label="Password (demo_password)",
         password=True,
         width=300,
         on_submit=lambda _: unlock_wallet()
     )
 
     address_text = ft.Text(
-        value=f"Address: {wallet.wallet_address}",
+        value=f"Address: {wallet.get_truncated_address()}",
         size=16,
         weight=ft.FontWeight.BOLD
     )
@@ -73,11 +101,17 @@ def main(page: ft.Page):
     )
 
     def unlock_wallet():
-        if password_field.value == "password123":  # Demo password
+        if password_field.value == "demo_password":  # Demo password (matches server)
             wallet.is_locked = False
             if wallet.server:
                 wallet.server.is_locked = False
 
+            # Update wallet info with real data
+            wallet.update_wallet_info()
+            
+            # Update UI with real wallet data
+            address_text.value = f"Address: {wallet.get_truncated_address()}"
+            balance_text.value = f"Balance: {wallet.balance} XIAN"
             status_text.value = "Wallet Unlocked"
             status_text.color = ft.Colors.GREEN_700
             password_field.visible = False
@@ -103,6 +137,10 @@ def main(page: ft.Page):
     def start_server():
         try:
             wallet.start_server()
+            
+            # Update UI with real wallet address (but keep balance as 0 since wallet is locked)
+            address_text.value = f"Address: {wallet.get_truncated_address()}"
+            
             server_status.value = "Server: Running on localhost:8545"
             server_status.color = ft.Colors.GREEN_700
             start_server_btn.visible = False

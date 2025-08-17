@@ -12,17 +12,19 @@ from xian_uwp.models import WalletType
 class WebWallet:
     def __init__(self):
         self.server = None
-        self.wallet_address = "xian5678...efgh"
+        self.wallet_address = "Not initialized"
         self.is_locked = True
-        self.balance = 2500.0
-        # Network configuration removed - should be set by user
+        self.balance = 0.0
+        self.network_url = "https://testnet.xian.org"
+        self.chain_id = "xian-testnet-1"
 
     def start_server(self):
         """Start the protocol server in background thread"""
-        self.server = WalletProtocolServer(wallet_type=WalletType.WEB)
-        # Network configuration should be set by the application using this wallet
-        # Example: self.server.configure_network("https://testnet.xian.org", "xian-testnet")
-        self.server.wallet = self
+        self.server = WalletProtocolServer(
+            wallet_type=WalletType.WEB,
+            network_url=self.network_url,
+            chain_id=self.chain_id
+        )
         self.server.is_locked = self.is_locked
 
         def run_server():
@@ -30,6 +32,29 @@ class WebWallet:
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
+        
+        # Wait a moment for server to initialize, then update UI with real wallet data
+        import time
+        time.sleep(1)  # Give server time to initialize
+        self.update_wallet_info()
+
+    def update_wallet_info(self):
+        """Update wallet info from the server's wallet instance"""
+        if self.server and self.server.wallet:
+            self.wallet_address = self.server.wallet.public_key
+            # Try to get balance if wallet is unlocked and network is available
+            if not self.is_locked and self.server.xian_client:
+                try:
+                    self.balance = self.server.xian_client.get_balance(self.wallet_address, contract="currency")
+                except Exception as e:
+                    print(f"Could not fetch balance: {e}")
+                    self.balance = 0.0
+        
+    def get_truncated_address(self):
+        """Get truncated address for display"""
+        if len(self.wallet_address) > 16:
+            return f"{self.wallet_address[:8]}...{self.wallet_address[-8:]}"
+        return self.wallet_address
 
 
 def main(page: ft.Page):
@@ -46,7 +71,7 @@ def main(page: ft.Page):
 
     # Password field
     password_field = ft.TextField(
-        label="Enter Password",
+        label="Enter Password (demo_password)",
         password=True,
         width=300,
         border_color=ft.Colors.BLUE_400
@@ -97,11 +122,14 @@ def main(page: ft.Page):
         page.update()
 
     def unlock_wallet():
-        if password_field.value == "webwallet123":
+        if password_field.value == "demo_password":  # Match server password
             wallet.is_locked = False
             if wallet.server:
                 wallet.server.is_locked = False
 
+            # Update wallet info with real data
+            wallet.update_wallet_info()
+            
             wallet_status.content = ft.Column([
                 ft.Icon(ft.Icons.LOCK_OPEN, color=ft.Colors.GREEN_400, size=40),
                 ft.Text("Wallet Unlocked", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
@@ -111,7 +139,9 @@ def main(page: ft.Page):
 
             password_field.value = ""
             show_notification("Wallet unlocked successfully!")
-            page.update()
+            
+            # Update the content area to refresh wallet info
+            update_content()
         else:
             show_notification("Invalid password", error=True)
 
@@ -133,6 +163,7 @@ def main(page: ft.Page):
     def start_server():
         try:
             wallet.start_server()
+            
             server_status.content = ft.Column([
                 ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=30),
                 ft.Text("Server Running", size=14, color=ft.Colors.GREEN_700),
@@ -142,7 +173,9 @@ def main(page: ft.Page):
             server_status.border = ft.border.all(1, ft.Colors.GREEN_300)
 
             show_notification("Protocol server started on port 8545")
-            page.update()
+            
+            # Update the content area to show real wallet address
+            update_content()
         except Exception as e:
             show_notification(f"Failed to start server: {str(e)}", error=True)
 
@@ -183,9 +216,9 @@ def main(page: ft.Page):
             return ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text(f"Address: {wallet.wallet_address}", size=16, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"Address: {wallet.get_truncated_address()}", size=16, weight=ft.FontWeight.BOLD),
                         ft.Text(f"Balance: {wallet.balance} XIAN", size=20, color=ft.Colors.GREEN_700),
-                        ft.Text(f"Network: {wallet.network}", size=14, color=ft.Colors.GREY_600),
+                        ft.Text(f"Network: {wallet.network_url}", size=14, color=ft.Colors.GREY_600),
                     ]),
                     padding=20,
                     border_radius=10,
