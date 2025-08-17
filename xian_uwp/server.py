@@ -604,8 +604,8 @@ class WalletProtocolServer:
             if self.server_task:
                 self.server_task.cancel()
                 try:
-                    await self.server_task
-                except asyncio.CancelledError:
+                    await asyncio.wait_for(self.server_task, timeout=2.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
                     pass
                     
             logger.info("✅ Server stopped")

@@ -23,16 +23,42 @@ class DesktopWallet:
             self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
             self.server.is_locked = self.is_locked
 
-            # Run server in background thread
+            # Run server in background thread using async approach
             def run_server():
-                self.server.run(host="127.0.0.1", port=8545)
+                import asyncio
+                
+                async def start_server_async():
+                    await self.server.start_async(host="127.0.0.1", port=8545)
+                    # Keep the thread alive while server is running
+                    while self.server.is_running:
+                        await asyncio.sleep(0.1)
+                
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(start_server_async())
+                except Exception as e:
+                    print(f"Server thread error: {e}")
+                finally:
+                    # Clean shutdown of remaining tasks
+                    try:
+                        pending = asyncio.all_tasks(loop)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    except Exception:
+                        pass
+                    finally:
+                        loop.close()
 
             self.server_thread = threading.Thread(target=run_server, daemon=True)
             self.server_thread.start()
             
             # Wait a moment for server to initialize, then update UI with real wallet data
             import time
-            time.sleep(1)  # Give server time to initialize
+            time.sleep(2)  # Give server more time to initialize with async approach
             self.update_wallet_info()
         except Exception as e:
             print(f"Failed to start server: {e}")
@@ -154,12 +180,12 @@ def main(page: ft.Page):
         """Stop the server properly"""
         try:
             if wallet.server:
-                # Stop the server properly
+                # Stop the server properly (this will cause the async loop to exit)
                 wallet.server.stop()
                 
                 # Wait a moment for server to stop
                 import time
-                time.sleep(1)
+                time.sleep(2)  # Give more time for async shutdown
                 
             # Clear references
             wallet.server = None
