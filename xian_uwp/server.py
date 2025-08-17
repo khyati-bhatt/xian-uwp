@@ -29,6 +29,7 @@ from .models import (
     AuthorizationResponse, StatusResponse,
     Session, PendingRequest
 )
+from .client import WalletProtocolError
 
 
 # Configure logging
@@ -42,7 +43,9 @@ class WalletProtocolServer:
     def __init__(
         self, 
         wallet_type: WalletType = WalletType.DESKTOP,
-        cors_config: Optional[CORSConfig] = None
+        cors_config: Optional[CORSConfig] = None,
+        network_url: Optional[str] = None,
+        chain_id: Optional[str] = None
     ):
         self.wallet_type = wallet_type
         self.wallet: Optional[Wallet] = None
@@ -53,9 +56,9 @@ class WalletProtocolServer:
         # CORS configuration
         self.cors_config = cors_config or CORSConfig.localhost_dev()
         
-        # Network configuration
-        self.network_url = "https://testnet.xian.org"
-        self.chain_id = "xian-testnet"
+        # Network configuration (configurable, must be set before use)
+        self.network_url = network_url
+        self.chain_id = chain_id
         
         # Session management
         self.sessions: Dict[str, Session] = {}
@@ -71,6 +74,17 @@ class WalletProtocolServer:
         
         # Initialize FastAPI app
         self.app = self._create_app()
+    
+    def configure_network(self, network_url: str, chain_id: str):
+        """Configure network settings"""
+        self.network_url = network_url
+        self.chain_id = chain_id
+        logger.info(f"🌐 Network configured: {network_url} (chain: {chain_id})")
+    
+    def _validate_network_config(self):
+        """Validate that network configuration is set"""
+        if not self.network_url or not self.chain_id:
+            raise WalletProtocolError("Network configuration not set. Call configure_network() first.")
     
     def _create_app(self) -> FastAPI:
         """Create and configure FastAPI application"""
@@ -348,6 +362,7 @@ class WalletProtocolServer:
         async def send_transaction(request: TransactionRequest, _: Session = Depends(require_permission(Permission.TRANSACTIONS))):
             """Send transaction"""
             check_wallet_unlocked()
+            self._validate_network_config()
             
             try:
                 nonce = get_nonce(self.network_url, self.wallet.public_key)
@@ -517,7 +532,9 @@ class WalletProtocolServer:
         """Initialize demo wallet for development"""
         try:
             self.wallet = Wallet()
-            self.xian_client = Xian(self.network_url, wallet=self.wallet)
+            # Only initialize xian_client if network is configured
+            if self.network_url:
+                self.xian_client = Xian(self.network_url, wallet=self.wallet)
             self.password_hash = hashlib.sha256("demo_password".encode()).hexdigest()
             logger.info(f"📍 Demo wallet initialized: {self.wallet.public_key}")
         except Exception as e:
