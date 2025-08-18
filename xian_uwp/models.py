@@ -1,14 +1,14 @@
-# protocol/models.py
 """
 Xian Wallet Protocol - Data Models
 Universal data models for all wallet implementations
 """
 
+import re
+
 from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Any, Union
-from enum import Enum
 from datetime import datetime
-import re
+from enum import Enum
 
 
 class WalletType(str, Enum):

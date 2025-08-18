@@ -1,4 +1,3 @@
-# protocol/client.py
 """
 Xian Wallet Protocol Client
 Universal client library for connecting to any Xian wallet

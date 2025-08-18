@@ -1,4 +1,3 @@
-# protocol/server.py
 """
 Xian Wallet Protocol Server
 Universal HTTP API server for all wallet implementations
@@ -9,7 +8,6 @@ import hashlib
 import secrets
 import logging
 import uvicorn
-import threading
 
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set

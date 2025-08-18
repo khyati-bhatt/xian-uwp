@@ -1,4 +1,3 @@
-# protocol/__init__.py
 """
 Xian Universal Wallet Protocol
 A unified interface for all Xian wallet types
