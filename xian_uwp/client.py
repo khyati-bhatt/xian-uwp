@@ -39,7 +39,7 @@ class XianWalletClient:
     def __init__(
         self,
         app_name: str,
-        app_url: str = "http://localhost",
+        app_url: str = "https://localhost",
         server_url: str = f"http://{ProtocolConfig.DEFAULT_HOST}:{ProtocolConfig.DEFAULT_PORT}",
         permissions: Optional[List[Permission]] = None,
         wallet_url: str = None  # Alias for server_url for backwards compatibility
@@ -197,7 +197,7 @@ class XianWalletClient:
             stamps_supplied=stamps_supplied
         )
         
-        response = await self._make_request("POST", Endpoints.TRANSACTION, json=request.dict())
+        response = await self._make_request("POST", Endpoints.TRANSACTION, json=request.model_dump())
         result = TransactionResult(**response)
         
         # Clear balance cache after transaction
@@ -210,22 +210,23 @@ class XianWalletClient:
         await self._ensure_connected()
         
         request = SignMessageRequest(message=message)
-        response = await self._make_request("POST", Endpoints.SIGN_MESSAGE, json=request.dict())
+        response = await self._make_request("POST", Endpoints.SIGN_MESSAGE, json=request.model_dump())
         signature_response = SignatureResponse(**response)
         
         return signature_response.signature
     
-    async def add_token(self, contract_address: str, token_name: str = None, token_symbol: str = None) -> bool:
+    async def add_token(self, contract_address: str, token_name: str = None, token_symbol: str = None, decimals: int = None) -> bool:
         """Add token to wallet"""
         await self._ensure_connected()
         
         request = AddTokenRequest(
             contract_address=contract_address,
             token_name=token_name,
-            token_symbol=token_symbol
+            token_symbol=token_symbol,
+            decimals=decimals
         )
         
-        response = await self._make_request("POST", Endpoints.ADD_TOKEN, json=request.dict())
+        response = await self._make_request("POST", Endpoints.ADD_TOKEN, json=request.model_dump())
         return response.get("accepted", False)
     
     # Public API methods
@@ -248,7 +249,7 @@ class XianWalletClient:
             session_token = await self._request_authorization()
             return {"session_token": session_token, "status": "approved" if session_token else "denied"}
     
-    async def wait_for_authorization(self, request_id: str = None) -> dict:
+    async def wait_for_authorization(self, _: str = None) -> dict:
         """Wait for authorization to be approved/denied"""
         # For now, simulate immediate approval for testing
         # In a real implementation, this would poll the auth status
@@ -271,13 +272,14 @@ class XianWalletClient:
         auth_request = AuthorizationRequest(
             app_name=self.app_name,
             app_url=self.app_url,
-            permissions=self.permissions
+            permissions=self.permissions,
+            description=f"Authorization request from {self.app_name}"
         )
         
         # Request authorization
         response = await self.http_client.post(
             f"{self.server_url}{Endpoints.AUTH_REQUEST}",
-            json=auth_request.dict()
+            json=auth_request.model_dump()
         )
         
         if response.status_code != 200:
@@ -489,7 +491,7 @@ class XianWalletUtils:
     def __init__(self):
         self.client: Optional[XianWalletClientSync] = None
     
-    def init(self, node_url: str = None):
+    def init(self, _: str = None):
         """Initialize (legacy compatibility)"""
         self.client = XianWalletClientSync("Legacy DApp")
         return self.client.connect(auto_approve=True)
