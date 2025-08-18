@@ -598,7 +598,6 @@ class WalletProtocolServer:
         """Stop the server asynchronously"""
         if self.uvicorn_server and self.is_running:
             logger.info("🛑 Stopping server...")
-            self.is_running = False
             self.uvicorn_server.should_exit = True
             
             if self.server_task:
@@ -609,6 +608,9 @@ class WalletProtocolServer:
                     pass
                     
             logger.info("✅ Server stopped")
+        
+        # Always set is_running to False when stop is called
+        self.is_running = False
             
     def stop(self):
         """Stop the server (synchronous wrapper)"""
