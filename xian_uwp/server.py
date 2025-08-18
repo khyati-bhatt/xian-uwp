@@ -5,6 +5,7 @@ Universal HTTP API server for all wallet implementations
 
 import asyncio
 import hashlib
+import json
 import secrets
 import logging
 import uvicorn
@@ -67,6 +68,7 @@ class WalletProtocolServer:
         self.sessions: Dict[str, Session] = {}
         self.pending_requests: Dict[str, PendingRequest] = {}
         self.websocket_connections: Set[WebSocket] = set()
+        self.websocket_subscriptions: Dict[WebSocket, Set[str]] = {}  # websocket -> set of request_ids
         
         # Cache and activity tracking
         self.cache: Dict[str, tuple] = {}  # (data, timestamp)
@@ -282,6 +284,14 @@ class WalletProtocolServer:
             self.sessions[session_token] = session
             del self.pending_requests[request_id]
             
+            # Broadcast approval via WebSocket
+            await self._broadcast_to_wallet({
+                "type": "authorization_approved",
+                "request_id": request_id,
+                "session_token": session_token,
+                "app_name": pending_request.app_name
+            })
+            
             return AuthorizationResponse(
                 session_token=session_token,
                 expires_at=expires_at,
@@ -292,7 +302,16 @@ class WalletProtocolServer:
         async def deny_authorization(request_id: str):
             """Deny authorization request"""
             if request_id in self.pending_requests:
+                pending_request = self.pending_requests[request_id]
                 del self.pending_requests[request_id]
+                
+                # Broadcast denial via WebSocket
+                await self._broadcast_to_wallet({
+                    "type": "authorization_denied",
+                    "request_id": request_id,
+                    "app_name": pending_request.app_name
+                })
+                
             return {"status": "denied"}
         
         # Wallet endpoints
@@ -441,15 +460,47 @@ class WalletProtocolServer:
             """WebSocket for real-time communication"""
             await websocket.accept()
             self.websocket_connections.add(websocket)
+            self.websocket_subscriptions[websocket] = set()
             
             try:
                 while True:
                     data = await websocket.receive_text()
-                    # Handle ping/pong
-                    if data == '{"type":"ping"}':
-                        await websocket.send_text('{"type":"pong"}')
+                    try:
+                        message = json.loads(data)
+                        
+                        # Handle ping/pong
+                        if message.get("type") == "ping":
+                            await websocket.send_text('{"type":"pong"}')
+                        
+                        # Handle subscription to authorization requests
+                        elif message.get("type") == "subscribe":
+                            request_id = message.get("request_id")
+                            if request_id:
+                                self.websocket_subscriptions[websocket].add(request_id)
+                                await websocket.send_text(json.dumps({
+                                    "type": "subscribed",
+                                    "request_id": request_id
+                                }))
+                        
+                        # Handle unsubscription
+                        elif message.get("type") == "unsubscribe":
+                            request_id = message.get("request_id")
+                            if request_id and websocket in self.websocket_subscriptions:
+                                self.websocket_subscriptions[websocket].discard(request_id)
+                                await websocket.send_text(json.dumps({
+                                    "type": "unsubscribed",
+                                    "request_id": request_id
+                                }))
+                                
+                    except json.JSONDecodeError:
+                        # Handle legacy ping/pong
+                        if data == '{"type":"ping"}':
+                            await websocket.send_text('{"type":"pong"}')
+                            
             except WebSocketDisconnect:
                 self.websocket_connections.discard(websocket)
+                if websocket in self.websocket_subscriptions:
+                    del self.websocket_subscriptions[websocket]
     
     # Cache management
     def _get_cached(self, key: str, ttl_seconds: int) -> Optional[Any]:
@@ -480,17 +531,33 @@ class WalletProtocolServer:
     
     # WebSocket helpers
     async def _broadcast_to_wallet(self, message: dict):
-        """Broadcast message to wallet UI"""
+        """Broadcast message to wallet UI and subscribed clients"""
+        
         if self.websocket_connections:
             disconnected = set()
+            message_str = json.dumps(message)
+            
+            # Check if this is an authorization-related message
+            message_type = message.get("type", "")
+            request_id = message.get("request_id")
+            
             for websocket in self.websocket_connections:
                 try:
-                    await websocket.send_text(str(message))
+                    # For authorization messages, only send to subscribed clients
+                    if message_type in ["authorization_approved", "authorization_denied"] and request_id:
+                        if websocket in self.websocket_subscriptions and request_id in self.websocket_subscriptions[websocket]:
+                            await websocket.send_text(message_str)
+                    else:
+                        # For other messages (like authorization_request), broadcast to all
+                        await websocket.send_text(message_str)
                 except:
                     disconnected.add(websocket)
             
             # Remove disconnected websockets
             self.websocket_connections -= disconnected
+            for ws in disconnected:
+                if ws in self.websocket_subscriptions:
+                    del self.websocket_subscriptions[ws]
     
     # Background tasks
     async def _cleanup_task(self):

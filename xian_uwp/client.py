@@ -4,6 +4,7 @@ Universal client library for connecting to any Xian wallet
 """
 
 import asyncio
+import json
 import time
 import logging
 import httpx
@@ -248,7 +249,7 @@ class XianWalletClient:
     
     async def wait_for_authorization(self, request_id: str, timeout: int = 300) -> dict:
         """
-        Wait for authorization to be approved/denied
+        Wait for authorization to be approved/denied using WebSocket
         
         Args:
             request_id: The authorization request ID to wait for
@@ -257,6 +258,51 @@ class XianWalletClient:
         Returns:
             Dictionary with status and session_token if approved
         """
+        logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
+        
+        # Try WebSocket first, fallback to polling if WebSocket fails
+        try:
+            return await self._wait_for_authorization_websocket(request_id, timeout)
+        except Exception as e:
+            logger.warning(f"WebSocket authorization failed, falling back to polling: {e}")
+            return await self._wait_for_authorization_polling(request_id, timeout)
+    
+    async def _wait_for_authorization_websocket(self, request_id: str, timeout: int) -> dict:
+        """Wait for authorization using WebSocket"""
+        ws_url = self.server_url.replace("http://", "ws://").replace("https://", "wss://")
+        ws_url += "/ws/v1"
+        
+        async def websocket_handler():
+            async with websockets.connect(ws_url) as websocket:
+                # Send subscription message for this request
+                await websocket.send(f'{{"type": "subscribe", "request_id": "{request_id}"}}')
+                
+                # Wait for authorization result
+                async for message in websocket:
+                    try:
+                        data = json.loads(message)
+                        
+                        if data.get("type") == "authorization_approved" and data.get("request_id") == request_id:
+                            return {
+                                "status": "approved",
+                                "session_token": data.get("session_token")
+                            }
+                        elif data.get("type") == "authorization_denied" and data.get("request_id") == request_id:
+                            return {"status": "denied", "session_token": None}
+                            
+                    except json.JSONDecodeError:
+                        continue
+        
+        try:
+            # Use asyncio.wait_for for timeout
+            return await asyncio.wait_for(websocket_handler(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"status": "timeout", "session_token": None}
+        except Exception as e:
+            raise e
+    
+    async def _wait_for_authorization_polling(self, request_id: str, timeout: int) -> dict:
+        """Fallback polling method for authorization"""
         start_time = asyncio.get_event_loop().time()
         
         while (asyncio.get_event_loop().time() - start_time) < timeout:
