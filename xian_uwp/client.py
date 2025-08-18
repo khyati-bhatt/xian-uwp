@@ -15,8 +15,7 @@ from typing import Dict, Any, Optional, List, Union
 from .models import (
     ConnectionStatus, Permission, ProtocolConfig, Endpoints, ErrorCodes,
     AuthorizationRequest, TransactionRequest, SignMessageRequest, AddTokenRequest,
-    WalletInfo, BalanceResponse, TransactionResult, SignatureResponse,
-    AuthorizationResponse, StatusResponse
+    WalletInfo, BalanceResponse, TransactionResult, SignatureResponse, StatusResponse
 )
 
 
