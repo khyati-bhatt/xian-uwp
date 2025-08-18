@@ -24,7 +24,12 @@ class DesktopWallet:
     def start_server(self):
         """Start the protocol server in background thread"""
         try:
-            self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
+            # Create a demo wallet for the server
+            from xian_py.wallet import Wallet
+            demo_wallet = Wallet()  # Creates a new wallet with random keys
+            self.wallet_address = demo_wallet.public_key
+            
+            self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP, wallet=demo_wallet)
             self.server.is_locked = self.is_locked
 
             # Run server in background thread using async approach
@@ -32,11 +37,16 @@ class DesktopWallet:
                 import asyncio
                 
                 async def start_server_async():
-                    # Use robust startup that handles port conflicts
-                    await self.server.start_async_robust(host="127.0.0.1", port=8545, max_retries=3)
-                    # Keep the thread alive while server is running
-                    while self.server.is_running:
-                        await asyncio.sleep(0.1)
+                    try:
+                        # Use robust startup that handles port conflicts
+                        await self.server.start_async_robust(host="127.0.0.1", port=8545, max_retries=3)
+                        # Keep the thread alive while server is running
+                        while self.server.is_running:
+                            await asyncio.sleep(0.1)
+                    except Exception as e:
+                        print(f"Protocol server failed to start: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # Create new event loop for this thread
                 loop = asyncio.new_event_loop()
@@ -110,6 +120,15 @@ def main(page: ft.Page):
     page.padding = 0
 
     wallet = DesktopWallet()
+    
+    # Auto-start the protocol server (UI elements will be defined later)
+    auto_start_success = False
+    try:
+        wallet.start_server()
+        print("✅ Protocol server auto-started successfully!")
+        auto_start_success = True
+    except Exception as e:
+        print(f"❌ Failed to auto-start protocol server: {e}")
 
     # UI State
     password_field = ft.TextField(
@@ -138,9 +157,9 @@ def main(page: ft.Page):
     )
 
     server_status = ft.Text(
-        value="Server: Stopped",
+        value="Server: Starting...",
         size=12,
-        color=ft.Colors.GREY_700
+        color=ft.Colors.ORANGE_700
     )
 
     def unlock_wallet():
@@ -253,6 +272,19 @@ def main(page: ft.Page):
         color=ft.Colors.WHITE,
         visible=False
     )
+    
+    # Update UI based on auto-start result
+    if auto_start_success:
+        server_status.value = "Server: Running on localhost:8545"
+        server_status.color = ft.Colors.GREEN_700
+        start_server_btn.visible = False
+        stop_server_btn.visible = True
+        address_text.value = f"Address: {wallet.get_truncated_address()}"
+    else:
+        server_status.value = "Server: Failed to start"
+        server_status.color = ft.Colors.RED_700
+        start_server_btn.visible = True
+        stop_server_btn.visible = False
 
     # Layout
     page.add(
