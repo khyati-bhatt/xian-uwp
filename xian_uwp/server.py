@@ -9,9 +9,10 @@ import json
 import secrets
 import logging
 import uvicorn
+import socket
 
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any, Set
+from typing import Dict, Optional, Any, Set, Tuple
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
@@ -30,6 +31,7 @@ from .models import (
     Session, PendingRequest
 )
 from .client import WalletProtocolError
+from .server_utils import RobustServerManager, ensure_port_available
 
 
 # Configure logging
@@ -56,6 +58,9 @@ class WalletProtocolServer:
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
         self.password_hash: Optional[str] = None
+        
+        # Robust server management
+        self.server_manager: Optional[RobustServerManager] = None
         
         # CORS configuration
         self.cors_config = cors_config or CORSConfig.localhost_dev()
@@ -637,38 +642,78 @@ class WalletProtocolServer:
         self, 
         host: str = ProtocolConfig.DEFAULT_HOST, 
         port: int = ProtocolConfig.DEFAULT_PORT,
-        allow_any_host: bool = False
+        allow_any_host: bool = False,
+        force_cleanup: bool = False
     ):
-        """Run the server (blocking call)"""
+        """Run the server (blocking call) with robust startup"""
         # Allow binding to any host for web deployment scenarios
         if allow_any_host:
             host = "0.0.0.0"
+
+        # Use asyncio to handle robust startup
+        asyncio.run(self._run_with_robust_startup(host, port, force_cleanup))
+
+    async def _run_with_robust_startup(self, host: str, port: int, force_cleanup: bool):
+        """Internal method to run server with robust startup"""
+        self.server_manager = RobustServerManager(host, port)
+        
+        # Ensure port is available
+        success, message = await self.server_manager.prepare_startup(force_cleanup)
+        logger.info(self.server_manager.get_startup_message(success, message))
+        
+        if not success and not force_cleanup:
+            raise RuntimeError(f"Cannot start server: {message}")
         
         logger.info(f"🌐 Starting server on {host}:{port}")
         logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
-        
-        # Create uvicorn server instance for proper shutdown control
-        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+
+        # Create uvicorn server instance with socket reuse
+        config = uvicorn.Config(
+            self.app, 
+            host=host, 
+            port=port, 
+            log_level="info",
+            # Enable socket reuse for robust restarts
+            access_log=False  # Reduce log noise
+        )
         self.uvicorn_server = uvicorn.Server(config)
         self.is_running = True
-        
+
         # Run the server (blocking)
-        self.uvicorn_server.run()
+        await self.uvicorn_server.serve()
         
     async def start_async(
         self,
         host: str = ProtocolConfig.DEFAULT_HOST,
         port: int = ProtocolConfig.DEFAULT_PORT,
-        allow_any_host: bool = False
+        allow_any_host: bool = False,
+        force_cleanup: bool = False
     ):
-        """Start the server asynchronously"""
+        """Start the server asynchronously with robust startup"""
         if allow_any_host:
             host = "0.0.0.0"
+        
+        # Initialize server manager
+        self.server_manager = RobustServerManager(host, port)
+        
+        # Ensure port is available
+        success, message = await self.server_manager.prepare_startup(force_cleanup)
+        logger.info(self.server_manager.get_startup_message(success, message))
+        
+        if not success and not force_cleanup:
+            raise RuntimeError(f"Cannot start server: {message}")
             
         logger.info(f"🌐 Starting server on {host}:{port}")
         logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
         
-        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        # Create uvicorn server instance with socket reuse
+        config = uvicorn.Config(
+            self.app, 
+            host=host, 
+            port=port, 
+            log_level="info",
+            access_log=False  # Reduce log noise
+        )
         self.uvicorn_server = uvicorn.Server(config)
         self.is_running = True
         
@@ -704,6 +749,71 @@ class WalletProtocolServer:
     def is_server_running(self):
         """Check if server is currently running"""
         return self.is_running and self.uvicorn_server is not None
+    
+    def run_robust(
+        self,
+        host: str = ProtocolConfig.DEFAULT_HOST,
+        port: int = ProtocolConfig.DEFAULT_PORT,
+        allow_any_host: bool = False,
+        max_retries: int = 3
+    ):
+        """
+        Run server with robust startup that handles port conflicts automatically
+        
+        This method will:
+        1. Check if port is in use
+        2. If in use, check if existing server is responsive
+        3. If unresponsive, clean up and start new server
+        4. Retry up to max_retries times
+        """
+        for attempt in range(max_retries):
+            try:
+                # On first attempt, try without force cleanup
+                # On subsequent attempts, use force cleanup
+                force_cleanup = attempt > 0
+                
+                logger.info(f"🚀 Server startup attempt {attempt + 1}/{max_retries}")
+                self.run(host=host, port=port, allow_any_host=allow_any_host, force_cleanup=force_cleanup)
+                return  # Success!
+                
+            except Exception as e:
+                logger.warning(f"Startup attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ Failed to start server after {max_retries} attempts")
+                    raise
+                else:
+                    logger.info(f"🔄 Retrying in 2 seconds...")
+                    import time
+                    time.sleep(2)
+    
+    async def start_async_robust(
+        self,
+        host: str = ProtocolConfig.DEFAULT_HOST,
+        port: int = ProtocolConfig.DEFAULT_PORT,
+        allow_any_host: bool = False,
+        max_retries: int = 3
+    ):
+        """
+        Start server asynchronously with robust startup that handles port conflicts automatically
+        """
+        for attempt in range(max_retries):
+            try:
+                # On first attempt, try without force cleanup
+                # On subsequent attempts, use force cleanup
+                force_cleanup = attempt > 0
+                
+                logger.info(f"🚀 Async server startup attempt {attempt + 1}/{max_retries}")
+                await self.start_async(host=host, port=port, allow_any_host=allow_any_host, force_cleanup=force_cleanup)
+                return  # Success!
+                
+            except Exception as e:
+                logger.warning(f"Async startup attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ Failed to start async server after {max_retries} attempts")
+                    raise
+                else:
+                    logger.info(f"🔄 Retrying in 2 seconds...")
+                    await asyncio.sleep(2)
 
 
 def create_server(
