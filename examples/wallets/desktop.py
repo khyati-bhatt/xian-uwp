@@ -23,35 +23,12 @@ class DesktopWallet:
             self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP)
             self.server.is_locked = self.is_locked
 
-            # Run server in background thread using async approach
+            # Run server in background thread
             def run_server():
-                import asyncio
-                
-                async def start_server_async():
-                    await self.server.start_async(host="127.0.0.1", port=8545)
-                    # Keep the thread alive while server is running
-                    while self.server.is_running:
-                        await asyncio.sleep(0.1)
-                
-                # Create new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(start_server_async())
+                    self.server.run(host="127.0.0.1", port=8545)
                 except Exception as e:
                     print(f"Server thread error: {e}")
-                finally:
-                    # Clean shutdown of remaining tasks
-                    try:
-                        pending = asyncio.all_tasks(loop)
-                        for task in pending:
-                            task.cancel()
-                        if pending:
-                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                    except Exception:
-                        pass
-                    finally:
-                        loop.close()
 
             self.server_thread = threading.Thread(target=run_server, daemon=True)
             self.server_thread.start()
@@ -191,12 +168,15 @@ def main(page: ft.Page):
         """Stop the server properly"""
         try:
             if wallet.server:
-                # Stop the server properly (this will cause the async loop to exit)
-                wallet.server.stop()
+                # For compatibility with both old and new server versions
+                if hasattr(wallet.server, 'stop'):
+                    wallet.server.stop()
+                elif hasattr(wallet.server, 'uvicorn_server'):
+                    wallet.server.uvicorn_server.should_exit = True
                 
                 # Wait a moment for server to stop
                 import time
-                time.sleep(2)  # Give more time for async shutdown
+                time.sleep(2)
                 
             # Clear references
             wallet.server = None
