@@ -301,42 +301,19 @@ class TestConfigurationAndCustomization:
         assert async_client.server_url == "http://localhost:8545"
         assert async_client.permissions == custom_permissions
         
-        # Test sync client with wallet_url (backwards compatibility)
+        # Test sync client with server_url
         sync_client = XianWalletClientSync(
-            app_name="Legacy DApp",
+            app_name="Test DApp",
             app_url="http://localhost:3000",
-            wallet_url="http://localhost:8546"
+            server_url="http://localhost:8546"
         )
         
-        assert sync_client.app_name == "Legacy DApp"
+        assert sync_client.app_name == "Test DApp"
         assert sync_client.app_url == "http://localhost:3000"
         assert sync_client.base_url == "http://localhost:8546"
 
 
-class TestLegacyCompatibility:
-    """Test legacy compatibility features"""
-    
-    def test_legacy_wallet_utils(self):
-        """Test legacy XianWalletUtils compatibility"""
-        from xian_uwp.client import XianWalletUtils
-        
-        utils = XianWalletUtils()
-        assert utils.client is None
-        
-        # Test that legacy methods exist (without actually connecting)
-        with patch.object(XianWalletClientSync, 'connect', return_value=True):
-            result = utils.init()
-            assert result is True
-            assert utils.client is not None
-            assert isinstance(utils.client, XianWalletClientSync)
-        
-        # Test that legacy methods exist
-        assert hasattr(utils, 'requestWalletInfo')
-        assert hasattr(utils, 'getBalance')
-        assert hasattr(utils, 'getApprovedBalance')
-        assert hasattr(utils, 'sendTransaction')
-        assert hasattr(utils, 'signMessage')
-        assert hasattr(utils, 'addToken')
+
 
 
 if __name__ == "__main__":

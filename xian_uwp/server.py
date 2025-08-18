@@ -5,6 +5,7 @@ Universal HTTP API server for all wallet implementations
 
 import asyncio
 import hashlib
+import json
 import secrets
 import logging
 import uvicorn
@@ -44,13 +45,14 @@ class WalletProtocolServer:
         wallet_type: WalletType = WalletType.DESKTOP,
         cors_config: Optional[CORSConfig] = None,
         network_url: Optional[str] = None,
-        chain_id: Optional[str] = None
+        chain_id: Optional[str] = None,
+        wallet: Optional[Wallet] = None
     ):
         self.wallet_type = wallet_type
         self.uvicorn_server = None
         self.server_task = None
         self.is_running = False
-        self.wallet: Optional[Wallet] = None
+        self.wallet = wallet
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
         self.password_hash: Optional[str] = None
@@ -66,6 +68,7 @@ class WalletProtocolServer:
         self.sessions: Dict[str, Session] = {}
         self.pending_requests: Dict[str, PendingRequest] = {}
         self.websocket_connections: Set[WebSocket] = set()
+        self.websocket_subscriptions: Dict[WebSocket, Set[str]] = {}  # websocket -> set of request_ids
         
         # Cache and activity tracking
         self.cache: Dict[str, tuple] = {}  # (data, timestamp)
@@ -92,10 +95,12 @@ class WalletProtocolServer:
         """Create and configure FastAPI application"""
         
         @asynccontextmanager
-        async def lifespan(app: FastAPI):
+        async def lifespan(_: FastAPI):
             logger.info("🚀 Xian Wallet Protocol Server starting...")
-            # Initialize demo wallet
-            await self._initialize_demo_wallet()
+            # Initialize network client if wallet and network are configured
+            if self.wallet and self.network_url:
+                self.xian_client = Xian(self.network_url, wallet=self.wallet)
+                logger.info(f"📍 Wallet initialized: {self.wallet.public_key}")
             # Start background tasks
             cleanup_task = asyncio.create_task(self._cleanup_task())
             self.background_tasks.add(cleanup_task)
@@ -204,7 +209,7 @@ class WalletProtocolServer:
             # Notify wallet UI via WebSocket
             await self._broadcast_to_wallet({
                 "type": "authorization_request",
-                "request": pending_request.dict()
+                "request": pending_request.model_dump()
             })
             
             # Auto-cleanup after 5 minutes
@@ -279,6 +284,14 @@ class WalletProtocolServer:
             self.sessions[session_token] = session
             del self.pending_requests[request_id]
             
+            # Broadcast approval via WebSocket
+            await self._broadcast_to_wallet({
+                "type": "authorization_approved",
+                "request_id": request_id,
+                "session_token": session_token,
+                "app_name": pending_request.app_name
+            })
+            
             return AuthorizationResponse(
                 session_token=session_token,
                 expires_at=expires_at,
@@ -289,7 +302,16 @@ class WalletProtocolServer:
         async def deny_authorization(request_id: str):
             """Deny authorization request"""
             if request_id in self.pending_requests:
+                pending_request = self.pending_requests[request_id]
                 del self.pending_requests[request_id]
+                
+                # Broadcast denial via WebSocket
+                await self._broadcast_to_wallet({
+                    "type": "authorization_denied",
+                    "request_id": request_id,
+                    "app_name": pending_request.app_name
+                })
+                
             return {"status": "denied"}
         
         # Wallet endpoints
@@ -356,11 +378,10 @@ class WalletProtocolServer:
                 return cached_data
             
             try:
-                if self.xian_client:
-                    balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
-                else:
-                    # Return demo balance when no blockchain client is configured
-                    balance = 100.0
+                if not self.xian_client:
+                    raise HTTPException(status_code=503, detail="Network client not configured")
+                
+                balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
                 response = BalanceResponse(balance=balance, contract=contract)
                 self._set_cache(cache_key, response)
                 return response
@@ -439,15 +460,46 @@ class WalletProtocolServer:
             """WebSocket for real-time communication"""
             await websocket.accept()
             self.websocket_connections.add(websocket)
+            self.websocket_subscriptions[websocket] = set()
             
             try:
                 while True:
                     data = await websocket.receive_text()
-                    # Handle ping/pong
-                    if data == '{"type":"ping"}':
-                        await websocket.send_text('{"type":"pong"}')
+                    try:
+                        message = json.loads(data)
+                        
+                        # Handle ping/pong
+                        if message.get("type") == "ping":
+                            await websocket.send_text('{"type":"pong"}')
+                        
+                        # Handle subscription to authorization requests
+                        elif message.get("type") == "subscribe":
+                            request_id = message.get("request_id")
+                            if request_id:
+                                self.websocket_subscriptions[websocket].add(request_id)
+                                await websocket.send_text(json.dumps({
+                                    "type": "subscribed",
+                                    "request_id": request_id
+                                }))
+                        
+                        # Handle unsubscription
+                        elif message.get("type") == "unsubscribe":
+                            request_id = message.get("request_id")
+                            if request_id and websocket in self.websocket_subscriptions:
+                                self.websocket_subscriptions[websocket].discard(request_id)
+                                await websocket.send_text(json.dumps({
+                                    "type": "unsubscribed",
+                                    "request_id": request_id
+                                }))
+                                
+                    except json.JSONDecodeError:
+                        # Invalid JSON message, ignore
+                        pass
+                            
             except WebSocketDisconnect:
                 self.websocket_connections.discard(websocket)
+                if websocket in self.websocket_subscriptions:
+                    del self.websocket_subscriptions[websocket]
     
     # Cache management
     def _get_cached(self, key: str, ttl_seconds: int) -> Optional[Any]:
@@ -478,17 +530,33 @@ class WalletProtocolServer:
     
     # WebSocket helpers
     async def _broadcast_to_wallet(self, message: dict):
-        """Broadcast message to wallet UI"""
+        """Broadcast message to wallet UI and subscribed clients"""
+        
         if self.websocket_connections:
             disconnected = set()
+            message_str = json.dumps(message)
+            
+            # Check if this is an authorization-related message
+            message_type = message.get("type", "")
+            request_id = message.get("request_id")
+            
             for websocket in self.websocket_connections:
                 try:
-                    await websocket.send_text(str(message))
+                    # For authorization messages, only send to subscribed clients
+                    if message_type in ["authorization_approved", "authorization_denied"] and request_id:
+                        if websocket in self.websocket_subscriptions and request_id in self.websocket_subscriptions[websocket]:
+                            await websocket.send_text(message_str)
+                    else:
+                        # For other messages (like authorization_request), broadcast to all
+                        await websocket.send_text(message_str)
                 except:
                     disconnected.add(websocket)
             
             # Remove disconnected websockets
             self.websocket_connections -= disconnected
+            for ws in disconnected:
+                if ws in self.websocket_subscriptions:
+                    del self.websocket_subscriptions[ws]
     
     # Background tasks
     async def _cleanup_task(self):
@@ -537,18 +605,34 @@ class WalletProtocolServer:
             current_task = asyncio.current_task()
             self.background_tasks.discard(current_task)
     
-    # Initialization
-    async def _initialize_demo_wallet(self):
-        """Initialize demo wallet for development"""
-        try:
-            self.wallet = Wallet()
-            # Only initialize xian_client if network is configured
-            if self.network_url:
-                self.xian_client = Xian(self.network_url, wallet=self.wallet)
-            self.password_hash = hashlib.sha256("demo_password".encode()).hexdigest()
-            logger.info(f"📍 Demo wallet initialized: {self.wallet.public_key}")
-        except Exception as e:
-            logger.error(f"Failed to initialize wallet: {e}")
+    # Wallet management
+    def set_wallet(self, wallet: Wallet, password_hash: Optional[str] = None):
+        """Set the wallet instance and optional password hash"""
+        self.wallet = wallet
+        if password_hash:
+            self.password_hash = password_hash
+        
+        # Initialize network client if network is configured
+        if self.network_url:
+            self.xian_client = Xian(self.network_url, wallet=self.wallet)
+            logger.info(f"📍 Wallet configured: {self.wallet.public_key}")
+    
+    def lock_wallet(self):
+        """Lock the wallet"""
+        self.is_locked = True
+        logger.info("🔒 Wallet locked")
+    
+    def unlock_wallet(self, password: str) -> bool:
+        """Unlock the wallet with password"""
+        if not self.password_hash:
+            raise HTTPException(status_code=400, detail="No password set for wallet")
+        
+        provided_hash = hashlib.sha256(password.encode()).hexdigest()
+        if provided_hash == self.password_hash:
+            self.is_locked = False
+            logger.info("🔓 Wallet unlocked")
+            return True
+        return False
     
     def run(
         self, 

@@ -39,7 +39,6 @@ from .server import WalletProtocolServer
 from .client import (
     XianWalletClient,
     XianWalletClientSync,
-    XianWalletUtils,  # Legacy compatibility
     WalletProtocolError,
     create_client
 )
@@ -60,10 +59,7 @@ def create_dapp_client(
     """Create a DApp client for connecting to wallets"""
     return create_client(app_name, app_url, async_mode=async_mode)
 
-# Legacy compatibility
-def init_legacy_utils():
-    """Initialize legacy XianWalletUtils for backward compatibility"""
-    return XianWalletUtils()
+
 
 # Protocol information
 PROTOCOL_INFO = {
@@ -110,7 +106,6 @@ __all__ = [
     "WalletProtocolServer",
     "XianWalletClient", 
     "XianWalletClientSync",
-    "XianWalletUtils",
     "WalletProtocolError",
     
     # Enums
@@ -141,7 +136,6 @@ __all__ = [
     "create_server",
     "create_dapp_client",
     "create_client",
-    "init_legacy_utils",
     
     # Utility functions
     "get_protocol_info",

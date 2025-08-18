@@ -36,8 +36,8 @@ def test_protocol():
     )
     
     try:
-        # Connect with auto-approve for testing
-        connected = client.connect(auto_approve=True)
+        # Connect for testing
+        connected = client.connect()
         if connected:
             print("✅ Client connected successfully\n")
         else:

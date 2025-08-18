@@ -30,7 +30,7 @@ class TestSyncClient:
         client = XianWalletClientSync(
             "Test DApp",
             app_url="https://testdapp.com",
-            wallet_url="http://localhost:8546"
+            server_url="http://localhost:8546"
         )
         
         assert client.app_url == "https://testdapp.com"
@@ -131,7 +131,7 @@ class TestSyncClient:
              patch.object(client.client, 'connect', return_value=True), \
              patch.object(client.client, 'session_token', "test_token_123", create=True):
             
-            result = client.connect([Permission.WALLET_INFO])
+            result = client.connect()
             
             assert result is True
 
@@ -198,7 +198,7 @@ class TestAsyncClient:
                  truncated_address="test_addr...123"
              )):
             
-            result = await client.connect([Permission.WALLET_INFO])
+            result = await client.connect()
             
             assert result is True
             assert client.session_token == "test_token_123"
@@ -239,7 +239,7 @@ class TestClientErrorHandling:
         
         with patch.object(client.client, '_check_wallet_available', return_value=True), \
              patch.object(client.client, '_request_authorization', return_value=None):
-            result = client.connect([Permission.WALLET_INFO])
+            result = client.connect()
             assert result is False
     
     @pytest.mark.unit
@@ -254,7 +254,7 @@ class TestClientErrorHandling:
                  wallet_type="desktop",
                  truncated_address="test_addr...123"
              )):
-            result = client.connect([])  # Empty permissions are valid
+            result = client.connect()  # Empty permissions are valid
             assert result is True
     
     @pytest.mark.unit
@@ -276,7 +276,7 @@ class TestClientConfiguration:
         client = XianWalletClientSync(
             app_name="Test DApp",
             app_url="https://testdapp.com",
-            wallet_url="http://localhost:8546"
+            server_url="http://localhost:8546"
         )
         
         assert client.app_name == "Test DApp"

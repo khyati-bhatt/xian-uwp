@@ -26,7 +26,7 @@ class UniversalDApp:
                 permissions=["wallet_info", "balance"]
             )
 
-            success = self.client.connect(auto_approve=True)  # Auto-approve for demo purposes
+            success = self.client.connect()  # Will wait for user approval
             if success:
                 self.wallet_info = self.client.get_wallet_info()
                 self.balance = self.client.get_balance("currency")

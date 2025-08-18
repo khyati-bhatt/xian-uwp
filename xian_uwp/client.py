@@ -4,6 +4,7 @@ Universal client library for connecting to any Xian wallet
 """
 
 import asyncio
+import json
 import time
 import logging
 import httpx
@@ -39,15 +40,13 @@ class XianWalletClient:
     def __init__(
         self,
         app_name: str,
-        app_url: str = "http://localhost",
+        app_url: str = "https://localhost",
         server_url: str = f"http://{ProtocolConfig.DEFAULT_HOST}:{ProtocolConfig.DEFAULT_PORT}",
-        permissions: Optional[List[Permission]] = None,
-        wallet_url: str = None  # Alias for server_url for backwards compatibility
+        permissions: Optional[List[Permission]] = None
     ):
         self.app_name = app_name
         self.app_url = app_url
-        # Use wallet_url if provided, otherwise use server_url
-        self.server_url = (wallet_url or server_url).rstrip('/')
+        self.server_url = server_url.rstrip('/')
         self.permissions = permissions or [
             Permission.WALLET_INFO,
             Permission.BALANCE,
@@ -78,12 +77,9 @@ class XianWalletClient:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
     
-    async def connect(self, auto_approve: bool = False) -> bool:
+    async def connect(self) -> bool:
         """
         Connect to wallet
-        
-        Args:
-            auto_approve: For testing - automatically approve requests
             
         Returns:
             True if connected successfully
@@ -96,7 +92,7 @@ class XianWalletClient:
                 raise WalletProtocolError("Wallet server not available", ErrorCodes.WALLET_NOT_FOUND)
             
             # Request authorization
-            session_token = await self._request_authorization(auto_approve)
+            session_token = await self._request_authorization()
             
             if session_token:
                 self.session_token = session_token
@@ -197,7 +193,7 @@ class XianWalletClient:
             stamps_supplied=stamps_supplied
         )
         
-        response = await self._make_request("POST", Endpoints.TRANSACTION, json=request.dict())
+        response = await self._make_request("POST", Endpoints.TRANSACTION, json=request.model_dump())
         result = TransactionResult(**response)
         
         # Clear balance cache after transaction
@@ -210,22 +206,23 @@ class XianWalletClient:
         await self._ensure_connected()
         
         request = SignMessageRequest(message=message)
-        response = await self._make_request("POST", Endpoints.SIGN_MESSAGE, json=request.dict())
+        response = await self._make_request("POST", Endpoints.SIGN_MESSAGE, json=request.model_dump())
         signature_response = SignatureResponse(**response)
         
         return signature_response.signature
     
-    async def add_token(self, contract_address: str, token_name: str = None, token_symbol: str = None) -> bool:
+    async def add_token(self, contract_address: str, token_name: str = None, token_symbol: str = None, decimals: int = None) -> bool:
         """Add token to wallet"""
         await self._ensure_connected()
         
         request = AddTokenRequest(
             contract_address=contract_address,
             token_name=token_name,
-            token_symbol=token_symbol
+            token_symbol=token_symbol,
+            decimals=decimals
         )
         
-        response = await self._make_request("POST", Endpoints.ADD_TOKEN, json=request.dict())
+        response = await self._make_request("POST", Endpoints.ADD_TOKEN, json=request.model_dump())
         return response.get("accepted", False)
     
     # Public API methods
@@ -248,11 +245,92 @@ class XianWalletClient:
             session_token = await self._request_authorization()
             return {"session_token": session_token, "status": "approved" if session_token else "denied"}
     
-    async def wait_for_authorization(self, request_id: str = None) -> dict:
-        """Wait for authorization to be approved/denied"""
-        # For now, simulate immediate approval for testing
-        # In a real implementation, this would poll the auth status
-        return {"status": "approved", "session_token": "mock_session_token"}
+    async def wait_for_authorization(self, request_id: str, timeout: int = 300) -> dict:
+        """
+        Wait for authorization to be approved/denied using WebSocket
+        
+        Args:
+            request_id: The authorization request ID to wait for
+            timeout: Maximum time to wait in seconds (default: 5 minutes)
+            
+        Returns:
+            Dictionary with status and session_token if approved
+        """
+        logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
+        
+        # Try WebSocket first, fallback to polling if WebSocket fails
+        try:
+            return await self._wait_for_authorization_websocket(request_id, timeout)
+        except Exception as e:
+            logger.warning(f"WebSocket authorization failed, falling back to polling: {e}")
+            return await self._wait_for_authorization_polling(request_id, timeout)
+    
+    async def _wait_for_authorization_websocket(self, request_id: str, timeout: int) -> dict:
+        """Wait for authorization using WebSocket"""
+        ws_url = self.server_url.replace("http://", "ws://").replace("https://", "wss://")
+        ws_url += "/ws/v1"
+        
+        async def websocket_handler():
+            async with websockets.connect(ws_url) as websocket:
+                # Send subscription message for this request
+                await websocket.send(f'{{"type": "subscribe", "request_id": "{request_id}"}}')
+                
+                # Wait for authorization result
+                async for message in websocket:
+                    try:
+                        data = json.loads(message)
+                        
+                        if data.get("type") == "authorization_approved" and data.get("request_id") == request_id:
+                            return {
+                                "status": "approved",
+                                "session_token": data.get("session_token")
+                            }
+                        elif data.get("type") == "authorization_denied" and data.get("request_id") == request_id:
+                            return {"status": "denied", "session_token": None}
+                            
+                    except json.JSONDecodeError:
+                        continue
+        
+        try:
+            # Use asyncio.wait_for for timeout
+            return await asyncio.wait_for(websocket_handler(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"status": "timeout", "session_token": None}
+        except Exception as e:
+            raise e
+    
+    async def _wait_for_authorization_polling(self, request_id: str, timeout: int) -> dict:
+        """Fallback polling method for authorization"""
+        start_time = asyncio.get_event_loop().time()
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            try:
+                # Check authorization status
+                status_endpoint = Endpoints.AUTH_STATUS.replace("{request_id}", request_id)
+                response = await self.http_client.get(f"{self.server_url}{status_endpoint}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    status = result.get("status")
+                    
+                    if status == "approved":
+                        return {
+                            "status": "approved", 
+                            "session_token": result.get("session_token")
+                        }
+                    elif status == "denied":
+                        return {"status": "denied", "session_token": None}
+                    # If status is "pending", continue polling
+                
+                # Wait before next poll
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                logger.warning(f"Error checking authorization status: {e}")
+                await asyncio.sleep(2)
+        
+        # Timeout reached
+        return {"status": "timeout", "session_token": None}
     
     # Private methods
     async def _check_wallet_available(self) -> bool:
@@ -266,18 +344,19 @@ class XianWalletClient:
         except:
             return False
     
-    async def _request_authorization(self, auto_approve: bool = False) -> Optional[str]:
-        """Request authorization from wallet"""
+    async def _request_authorization(self) -> Optional[str]:
+        """Request authorization from wallet and wait for user approval"""
         auth_request = AuthorizationRequest(
             app_name=self.app_name,
             app_url=self.app_url,
-            permissions=self.permissions
+            permissions=self.permissions,
+            description=f"Authorization request from {self.app_name}"
         )
         
         # Request authorization
         response = await self.http_client.post(
             f"{self.server_url}{Endpoints.AUTH_REQUEST}",
-            json=auth_request.dict()
+            json=auth_request.model_dump()
         )
         
         if response.status_code != 200:
@@ -286,30 +365,17 @@ class XianWalletClient:
         result = response.json()
         request_id = result["request_id"]
         
-        if auto_approve:
-            # Auto-approve for testing
-            await asyncio.sleep(1)
-            approve_endpoint = Endpoints.AUTH_APPROVE.replace("{request_id}", request_id)
-            approve_response = await self.http_client.post(f"{self.server_url}{approve_endpoint}")
-            
-            if approve_response.status_code == 200:
-                auth_result = AuthorizationResponse(**approve_response.json())
-                return auth_result.session_token
-        else:
-            # Wait for user approval (in production, this would be via WebSocket notification)
-            logger.info(f"⏳ Waiting for authorization approval for {self.app_name}")
-            
-            # Poll for approval (simplified for demo)
-            for _ in range(30):  # Wait up to 30 seconds
-                await asyncio.sleep(1)
-                approve_endpoint = Endpoints.AUTH_APPROVE.replace("{request_id}", request_id)
-                try:
-                    approve_response = await self.http_client.post(f"{self.server_url}{approve_endpoint}")
-                    if approve_response.status_code == 200:
-                        auth_result = AuthorizationResponse(**approve_response.json())
-                        return auth_result.session_token
-                except:
-                    continue
+        logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
+        
+        # Wait for user approval using the proper polling method
+        auth_result = await self.wait_for_authorization(request_id, timeout=300)
+        
+        if auth_result["status"] == "approved":
+            return auth_result["session_token"]
+        elif auth_result["status"] == "denied":
+            raise WalletProtocolError("Authorization denied by user")
+        elif auth_result["status"] == "timeout":
+            raise WalletProtocolError("Authorization request timed out")
         
         return None
     
@@ -354,7 +420,7 @@ class XianWalletClient:
         
         try:
             self._reconnect_attempts += 1
-            await self.connect(auto_approve=True)
+            await self.connect()
             self._reconnect_attempts = 0
         except Exception:
             pass
@@ -435,9 +501,9 @@ class XianWalletClientSync:
         """Wait for authorization to be approved/denied"""
         return self._run_async(self.client.wait_for_authorization(request_id))
     
-    def connect(self, auto_approve: bool = False) -> bool:
+    def connect(self) -> bool:
         """Connect to wallet"""
-        return self._run_async(self.client.connect(auto_approve))
+        return self._run_async(self.client.connect())
     
     def disconnect(self):
         """Disconnect from wallet"""
@@ -482,63 +548,3 @@ def create_client(
         return XianWalletClientSync(app_name, app_url, **kwargs)
 
 
-# Legacy compatibility (matches original dapp-utils interface)
-class XianWalletUtils:
-    """Legacy compatibility class matching JavaScript dapp-utils API"""
-    
-    def __init__(self):
-        self.client: Optional[XianWalletClientSync] = None
-    
-    def init(self, node_url: str = None):
-        """Initialize (legacy compatibility)"""
-        self.client = XianWalletClientSync("Legacy DApp")
-        return self.client.connect(auto_approve=True)
-    
-    def requestWalletInfo(self) -> dict:
-        """Request wallet info (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        info = self.client.get_wallet_info()
-        return {
-            "address": info.address,
-            "truncatedAddress": info.truncated_address,
-            "locked": info.locked,
-            "chainId": info.chain_id
-        }
-    
-    def getBalance(self, contract: str = "currency") -> Union[float, int]:
-        """Get balance (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        return self.client.get_balance(contract)
-    
-    def getApprovedBalance(self, contract: str, spender: str) -> Union[float, int]:
-        """Get approved balance (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        return self.client.get_approved_balance(contract, spender)
-    
-    def sendTransaction(self, contract: str, function: str, kwargs: dict, stamps_supplied: int = None) -> dict:
-        """Send transaction (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        result = self.client.send_transaction(contract, function, kwargs, stamps_supplied)
-        return {
-            "result": result.result,
-            "errors": result.errors,
-            "hash": result.transaction_hash
-        }
-    
-    def signMessage(self, message: str) -> dict:
-        """Sign message (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        signature = self.client.sign_message(message)
-        return {"signature": signature}
-    
-    def addToken(self, contract_address: str) -> dict:
-        """Add token (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        accepted = self.client.add_token(contract_address)
-        return {"accepted": accepted}
