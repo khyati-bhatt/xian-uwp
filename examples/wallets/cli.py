@@ -20,7 +20,8 @@ class CLIWallet:
         self.address = None
         self.private_key = None
         self.is_locked = True
-        self.balance = 1000.0
+        self.balance = 0.0
+        self.server = None
 
     def save_encrypted(self, password: str):
         """Save wallet to encrypted file"""
@@ -81,9 +82,14 @@ def cli():
               help='Password to encrypt the wallet')
 def create(password):
     """Create a new wallet"""
+    from xian_py.wallet import Wallet
+    
+    # Create a real wallet instance
+    real_wallet = Wallet()
+    
     wallet = CLIWallet()
-    wallet.address = "xian1234567890abcdef"  # Demo address
-    wallet.private_key = "private_key_demo"  # Demo key
+    wallet.address = real_wallet.public_key
+    wallet.private_key = real_wallet.private_key
 
     try:
         wallet.save_encrypted(password)
@@ -114,8 +120,15 @@ def start(password, port, background):
 
     # Create and start server
     server = WalletProtocolServer(wallet_type=WalletType.CLI)
-    server.wallet = wallet
+    
+    # Import the wallet into the server's wallet instance
+    from xian_py.wallet import Wallet
+    server.wallet = Wallet(private_key=wallet.private_key)
     server.is_locked = False
+    
+    # Update CLI wallet with server wallet data for consistency
+    wallet.address = server.wallet.public_key
+    wallet.server = server
 
     click.echo(f"🚀 Starting Xian CLI Wallet daemon...")
     click.echo(f"Address: {wallet.address}")
@@ -169,6 +182,9 @@ def info(password):
     if not wallet.load_encrypted(password):
         click.echo("❌ Invalid password", err=True)
         return
+
+    # Set demo balance for consistency (no real blockchain needed)
+    wallet.balance = 100.0
 
     click.echo("📱 Wallet Information:")
     click.echo(f"Address: {wallet.address}")

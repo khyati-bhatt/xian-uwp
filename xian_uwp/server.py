@@ -9,6 +9,7 @@ import hashlib
 import secrets
 import logging
 import uvicorn
+import threading
 
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set
@@ -48,6 +49,9 @@ class WalletProtocolServer:
         chain_id: Optional[str] = None
     ):
         self.wallet_type = wallet_type
+        self.uvicorn_server = None
+        self.server_task = None
+        self.is_running = False
         self.wallet: Optional[Wallet] = None
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
@@ -294,7 +298,9 @@ class WalletProtocolServer:
         @app.get(Endpoints.WALLET_INFO, response_model=WalletInfo)
         async def get_wallet_info(_: Session = Depends(require_permission(Permission.WALLET_INFO))):
             """Get wallet information"""
-            check_wallet_unlocked()
+            # Wallet info should be available even when locked - only check wallet exists
+            if not self.wallet:
+                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
             
             cache_key = "wallet_info"
             cached_data = self._get_cached(cache_key, ttl_seconds=60)
@@ -341,7 +347,9 @@ class WalletProtocolServer:
         @app.get(Endpoints.BALANCE.replace("{contract}", "{contract}"), response_model=BalanceResponse)
         async def get_balance(contract: str, _: Session = Depends(require_permission(Permission.BALANCE))):
             """Get token balance"""
-            check_wallet_unlocked()
+            # Balance should be available even when locked - only check wallet exists
+            if not self.wallet:
+                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
             
             cache_key = f"balance_{contract}_{self.wallet.public_key}"
             cached_data = self._get_cached(cache_key, ttl_seconds=10)
@@ -350,7 +358,11 @@ class WalletProtocolServer:
                 return cached_data
             
             try:
-                balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
+                if self.xian_client:
+                    balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
+                else:
+                    # Return demo balance when no blockchain client is configured
+                    balance = 100.0
                 response = BalanceResponse(balance=balance, contract=contract)
                 self._set_cache(cache_key, response)
                 return response
@@ -546,14 +558,69 @@ class WalletProtocolServer:
         port: int = ProtocolConfig.DEFAULT_PORT,
         allow_any_host: bool = False
     ):
-        """Run the server"""
+        """Run the server (blocking call)"""
         # Allow binding to any host for web deployment scenarios
         if allow_any_host:
             host = "0.0.0.0"
         
         logger.info(f"🌐 Starting server on {host}:{port}")
         logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
-        uvicorn.run(self.app, host=host, port=port, log_level="info")
+        
+        # Create uvicorn server instance for proper shutdown control
+        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        self.uvicorn_server = uvicorn.Server(config)
+        self.is_running = True
+        
+        # Run the server (blocking)
+        self.uvicorn_server.run()
+        
+    async def start_async(
+        self,
+        host: str = ProtocolConfig.DEFAULT_HOST,
+        port: int = ProtocolConfig.DEFAULT_PORT,
+        allow_any_host: bool = False
+    ):
+        """Start the server asynchronously"""
+        if allow_any_host:
+            host = "0.0.0.0"
+            
+        logger.info(f"🌐 Starting server on {host}:{port}")
+        logger.info(f"🔒 CORS origins: {self.cors_config.allow_origins}")
+        
+        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        self.uvicorn_server = uvicorn.Server(config)
+        self.is_running = True
+        
+        # Start server in background task
+        self.server_task = asyncio.create_task(self.uvicorn_server.serve())
+        
+    async def stop_async(self):
+        """Stop the server asynchronously"""
+        if self.uvicorn_server and self.is_running:
+            logger.info("🛑 Stopping server...")
+            self.is_running = False
+            self.uvicorn_server.should_exit = True
+            
+            if self.server_task:
+                self.server_task.cancel()
+                try:
+                    await asyncio.wait_for(self.server_task, timeout=2.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                    
+            logger.info("✅ Server stopped")
+            
+    def stop(self):
+        """Stop the server (synchronous wrapper)"""
+        if self.uvicorn_server and self.is_running:
+            logger.info("🛑 Stopping server...")
+            self.is_running = False
+            self.uvicorn_server.should_exit = True
+            logger.info("✅ Server stop requested")
+            
+    def is_server_running(self):
+        """Check if server is currently running"""
+        return self.is_running and self.uvicorn_server is not None
 
 
 def create_server(

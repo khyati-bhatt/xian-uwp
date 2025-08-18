@@ -38,17 +38,12 @@ class ServerHostedDApp {
             connectBtn: document.getElementById('connectBtn'),
             disconnectBtn: document.getElementById('disconnectBtn'),
             walletInfo: document.querySelector('.wallet-info'),
-            demoActions: document.querySelector('.demo-actions'),
+
             walletAddress: document.getElementById('walletAddress'),
             walletBalance: document.getElementById('walletBalance'),
             walletNetwork: document.getElementById('walletNetwork'),
             walletType: document.getElementById('walletType'),
             refreshBtn: document.getElementById('refreshBtn'),
-            recipientInput: document.getElementById('recipientInput'),
-            amountInput: document.getElementById('amountInput'),
-            sendTxBtn: document.getElementById('sendTxBtn'),
-            messageInput: document.getElementById('messageInput'),
-            signMsgBtn: document.getElementById('signMsgBtn'),
             resultsLog: document.getElementById('resultsLog'),
             clearLogBtn: document.getElementById('clearLogBtn')
         };
@@ -111,8 +106,6 @@ class ServerHostedDApp {
         this.elements.connectBtn.addEventListener('click', () => this.connectWallet());
         this.elements.disconnectBtn.addEventListener('click', () => this.disconnectWallet());
         this.elements.refreshBtn.addEventListener('click', () => this.refreshWalletInfo());
-        this.elements.sendTxBtn.addEventListener('click', () => this.sendTransaction());
-        this.elements.signMsgBtn.addEventListener('click', () => this.signMessage());
         this.elements.clearLogBtn.addEventListener('click', () => this.clearLog());
     }
 
@@ -126,13 +119,13 @@ class ServerHostedDApp {
                 'Server-Hosted DApp Demo',
                 window.location.origin,
                 'http://localhost:8545',
-                ['wallet_info', 'balance', 'transactions', 'sign_message']
+                ['wallet_info', 'balance']
             );
             
             this.logMessage('Requesting wallet connection...', 'info');
             
-            // Connect to wallet
-            await this.client.connect();
+            // Connect to wallet (auto-approve for demo purposes)
+            await this.client.connect(true);
             
             this.connected = true;
             this.updateConnectionStatus('connected', 'Connected');
@@ -141,7 +134,7 @@ class ServerHostedDApp {
             
             // Show wallet sections
             this.elements.walletInfo.style.display = 'block';
-            this.elements.demoActions.style.display = 'block';
+
             
             // Load wallet information
             await this.refreshWalletInfo();
@@ -180,7 +173,7 @@ class ServerHostedDApp {
             
             // Hide wallet sections
             this.elements.walletInfo.style.display = 'none';
-            this.elements.demoActions.style.display = 'none';
+
             
             this.logMessage('Disconnected from wallet', 'info');
             
@@ -204,7 +197,7 @@ class ServerHostedDApp {
             
             // Update UI
             this.elements.walletAddress.textContent = walletInfo.address || 'Unknown';
-            this.elements.walletBalance.textContent = `${balance.balance || 'Error'} TAU`;
+            this.elements.walletBalance.textContent = `${balance.balance || 'Error'} XIAN`;
             this.elements.walletNetwork.textContent = walletInfo.network || 'Unknown';
             this.elements.walletType.textContent = walletInfo.wallet_type || 'Unknown';
             
@@ -218,82 +211,7 @@ class ServerHostedDApp {
         }
     }
 
-    async sendTransaction() {
-        if (!this.connected || !this.client) return;
-        
-        const recipient = this.elements.recipientInput.value.trim();
-        const amount = parseFloat(this.elements.amountInput.value);
-        
-        if (!recipient) {
-            this.logMessage('Please enter a recipient address', 'warning');
-            return;
-        }
-        
-        if (!amount || amount <= 0) {
-            this.logMessage('Please enter a valid amount', 'warning');
-            return;
-        }
-        
-        try {
-            this.elements.sendTxBtn.disabled = true;
-            this.elements.sendTxBtn.textContent = 'Sending...';
-            
-            this.logMessage(`Sending ${amount} TAU to ${recipient}...`, 'info');
-            
-            const result = await this.client.sendTransaction(
-                'currency',
-                'transfer',
-                { to: recipient, amount: amount },
-                50000
-            );
-            
-            this.logMessage(`Transaction sent! Hash: ${result.hash}`, 'success');
-            
-            // Clear form
-            this.elements.recipientInput.value = '';
-            this.elements.amountInput.value = '';
-            
-            // Refresh balance after a delay
-            setTimeout(() => this.refreshWalletInfo(), 2000);
-            
-        } catch (error) {
-            this.logMessage(`Transaction failed: ${error.message}`, 'error');
-        } finally {
-            this.elements.sendTxBtn.disabled = false;
-            this.elements.sendTxBtn.textContent = 'Send Transaction';
-        }
-    }
 
-    async signMessage() {
-        if (!this.connected || !this.client) return;
-        
-        const message = this.elements.messageInput.value.trim();
-        
-        if (!message) {
-            this.logMessage('Please enter a message to sign', 'warning');
-            return;
-        }
-        
-        try {
-            this.elements.signMsgBtn.disabled = true;
-            this.elements.signMsgBtn.textContent = 'Signing...';
-            
-            this.logMessage(`Signing message: "${message}"`, 'info');
-            
-            const result = await this.client.signMessage(message);
-            
-            this.logMessage(`Message signed! Signature: ${result.signature}`, 'success');
-            
-            // Clear form
-            this.elements.messageInput.value = '';
-            
-        } catch (error) {
-            this.logMessage(`Signing failed: ${error.message}`, 'error');
-        } finally {
-            this.elements.signMsgBtn.disabled = false;
-            this.elements.signMsgBtn.textContent = 'Sign Message';
-        }
-    }
 
     updateConnectionStatus(status, text) {
         this.elements.connectionIndicator.className = `status-dot ${status}`;

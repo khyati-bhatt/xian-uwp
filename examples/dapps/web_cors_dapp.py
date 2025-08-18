@@ -26,17 +26,11 @@ class WebDAppState(rx.State):
     wallet_type: str = ""
     connection_status: str = "Disconnected"
     
-    # Transaction state
-    recipient: str = ""
-    amount: str = ""
-    transaction_result: str = ""
-    
     # Balance
     balance: float = 0.0
     
     # Loading states
     connecting: bool = False
-    sending: bool = False
     refreshing: bool = False
     
     # Error handling
@@ -61,9 +55,7 @@ class WebDAppState(rx.State):
                 server_url="http://localhost:8545",  # Local wallet server
                 permissions=[
                     Permission.WALLET_INFO,
-                    Permission.BALANCE,
-                    Permission.TRANSACTIONS,
-                    Permission.SIGN_MESSAGE
+                    Permission.BALANCE
                 ]
             )
             
@@ -132,53 +124,29 @@ class WebDAppState(rx.State):
             self.refreshing = False
             yield
     
-    def send_transaction(self):
-        """Send a transaction"""
+    def manual_refresh_balance(self):
+        """Manually refresh balance from wallet"""
         if not self.is_connected or not self._client:
             self.error_message = "Wallet not connected"
             return
-        
-        if not self.recipient or not self.amount:
-            self.error_message = "Please enter recipient and amount"
-            return
-        
-        self.sending = True
-        self.transaction_result = ""
+            
+        self.refreshing = True
         self.error_message = ""
         yield
         
         try:
-            amount_float = float(self.amount)
-            
-            result = self._client.send_transaction(
-                contract="currency",
-                function="transfer",
-                kwargs={
-                    "to": self.recipient,
-                    "amount": amount_float
-                }
-            )
-            
-            if result.success:
-                self.transaction_result = f"✅ Transaction sent! Hash: {result.transaction_hash[:16]}..."
-                self.recipient = ""
-                self.amount = ""
-                # Refresh balance after successful transaction
-                self.refresh_balance()
-            else:
-                self.transaction_result = f"❌ Transaction failed: {', '.join(result.errors or ['Unknown error'])}"
-                
-        except ValueError:
-            self.error_message = "Invalid amount format"
+            self.refresh_balance()
         except Exception as e:
-            self.error_message = f"Transaction error: {str(e)}"
+            self.error_message = f"Failed to refresh balance: {str(e)}"
         finally:
-            self.sending = False
+            self.refreshing = False
             yield
     
     def clear_error(self):
         """Clear error message"""
         self.error_message = ""
+    
+
 
 
 def connection_card() -> rx.Component:
@@ -223,42 +191,32 @@ def connection_card() -> rx.Component:
     )
 
 
-def transaction_card() -> rx.Component:
-    """Transaction form card"""
+def balance_card() -> rx.Component:
+    """Balance display and refresh card"""
     return rx.card(
         rx.vstack(
-            rx.heading("Send Transaction", size="4"),
+            rx.heading("Wallet Balance", size="4"),
             rx.cond(
                 WebDAppState.is_connected,
                 rx.vstack(
-                    rx.input(
-                        placeholder="Recipient address",
-                        value=WebDAppState.recipient,
-                        on_change=WebDAppState.set_recipient,
-                        width="100%"
-                    ),
-                    rx.input(
-                        placeholder="Amount",
-                        value=WebDAppState.amount,
-                        on_change=WebDAppState.set_amount,
-                        type="number",
-                        width="100%"
+                    rx.text(
+                        f"{WebDAppState.balance} XIAN",
+                        size="6",
+                        weight="bold",
+                        color="green"
                     ),
                     rx.button(
-                        "Send Transaction",
-                        on_click=WebDAppState.send_transaction,
-                        loading=WebDAppState.sending,
+                        "Refresh Balance",
+                        on_click=WebDAppState.manual_refresh_balance,
+                        loading=WebDAppState.refreshing,
                         disabled=~WebDAppState.is_connected,
+                        color_scheme="blue",
                         size="3",
                         width="100%"
                     ),
-                    rx.cond(
-                        WebDAppState.transaction_result,
-                        rx.text(WebDAppState.transaction_result, size="2"),
-                    ),
                     spacing="3"
                 ),
-                rx.text("Connect wallet to send transactions", color="gray")
+                rx.text("Connect wallet to view balance", color="gray")
             ),
             spacing="3"
         ),
@@ -286,7 +244,7 @@ def info_card() -> rx.Component:
         rx.vstack(
             rx.heading("CORS Web DApp Example", size="4"),
             rx.text(
-                "This example demonstrates how to create a web-based DApp that connects to a local wallet server with proper CORS configuration.",
+                "This example demonstrates how to create a web-based DApp that connects to a local wallet server with proper CORS configuration to view wallet address and balance.",
                 size="2"
             ),
             rx.text("Setup Instructions:", weight="bold", size="2"),
@@ -316,7 +274,7 @@ def index() -> rx.Component:
             error_alert(),
             info_card(),
             connection_card(),
-            transaction_card(),
+            balance_card(),
             spacing="4",
             width="100%",
             max_width="600px"

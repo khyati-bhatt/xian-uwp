@@ -21,7 +21,7 @@ This example demonstrates the **real-world scenario** where a DApp is hosted on 
 - **CORS-enabled communication**: Secure cross-origin requests
 - **Universal wallet support**: Works with any Xian wallet type
 - **Production-ready**: Includes proper error handling and user guidance
-- **Interactive demo**: Full wallet integration with transactions and signing
+- **Interactive demo**: Wallet connection with address and balance display
 - **Responsive design**: Works on desktop and mobile devices
 
 ## 🚀 Quick Start

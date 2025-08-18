@@ -126,8 +126,8 @@ class XianDApp {
             this.log('Requesting wallet authorization...', 'info');
             this.log('Please check your wallet and approve the connection request.', 'warning');
 
-            // Connect to wallet
-            const result = await this.client.connect();
+            // Connect to wallet (auto-approve for demo purposes)
+            const result = await this.client.connect(true);
             
             this.isConnected = true;
             this.walletInfo = result.walletInfo;
