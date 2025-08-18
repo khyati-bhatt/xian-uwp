@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xian-uwp"
-version = "0.2.0"
+version = "0.2.2"
 description = "Xian Universal Wallet Protocol - A unified HTTP API interface for Xian wallets and DApps"
 authors = ["Endogen <endogen@xian.org>"]
 readme = "README.md"
