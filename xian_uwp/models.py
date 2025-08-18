@@ -5,7 +5,7 @@ Universal data models for all wallet implementations
 
 import re
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 from enum import Enum
@@ -53,7 +53,8 @@ class AuthorizationRequest(BaseModel):
     permissions: List[Permission]
     description: Optional[str] = Field(None, max_length=500)
     
-    @validator('app_url')
+    @field_validator('app_url')
+    @classmethod
     def validate_url(cls, v):
         """Validate URL format"""
         url_pattern = re.compile(
@@ -67,7 +68,8 @@ class AuthorizationRequest(BaseModel):
             raise ValueError('Invalid URL format')
         return v
     
-    @validator('permissions')
+    @field_validator('permissions')
+    @classmethod
     def validate_permissions_not_empty(cls, v):
         """Ensure permissions list is not empty and deduplicate"""
         if not v:
