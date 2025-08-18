@@ -1,5 +1,9 @@
 # examples/dapps/universal_dapp.py
 # Requires: pip install flet>=0.28.3
+#
+# IMPORTANT: This example requires the latest development version of xian-uwp.
+# Run with: PYTHONPATH=. python examples/dapps/universal_dapp.py
+# Or install development version: pip install -e .
 
 import flet as ft
 
