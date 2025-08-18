@@ -92,7 +92,7 @@ class WalletProtocolServer:
         """Create and configure FastAPI application"""
         
         @asynccontextmanager
-        async def lifespan(app: FastAPI):
+        async def lifespan(_: FastAPI):
             logger.info("🚀 Xian Wallet Protocol Server starting...")
             # Initialize demo wallet
             await self._initialize_demo_wallet()
@@ -204,7 +204,7 @@ class WalletProtocolServer:
             # Notify wallet UI via WebSocket
             await self._broadcast_to_wallet({
                 "type": "authorization_request",
-                "request": pending_request.dict()
+                "request": pending_request.model_dump()
             })
             
             # Auto-cleanup after 5 minutes
