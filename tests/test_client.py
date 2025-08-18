@@ -30,7 +30,7 @@ class TestSyncClient:
         client = XianWalletClientSync(
             "Test DApp",
             app_url="https://testdapp.com",
-            wallet_url="http://localhost:8546"
+            server_url="http://localhost:8546"
         )
         
         assert client.app_url == "https://testdapp.com"
@@ -276,7 +276,7 @@ class TestClientConfiguration:
         client = XianWalletClientSync(
             app_name="Test DApp",
             app_url="https://testdapp.com",
-            wallet_url="http://localhost:8546"
+            server_url="http://localhost:8546"
         )
         
         assert client.app_name == "Test DApp"

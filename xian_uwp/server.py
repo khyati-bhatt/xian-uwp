@@ -493,9 +493,8 @@ class WalletProtocolServer:
                                 }))
                                 
                     except json.JSONDecodeError:
-                        # Handle legacy ping/pong
-                        if data == '{"type":"ping"}':
-                            await websocket.send_text('{"type":"pong"}')
+                        # Invalid JSON message, ignore
+                        pass
                             
             except WebSocketDisconnect:
                 self.websocket_connections.discard(websocket)

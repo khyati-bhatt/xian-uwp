@@ -265,13 +265,13 @@ else:
 
 ### Legacy Compatibility
 
-For existing JavaScript DApps:
+For JavaScript DApps, use the HTTP API directly:
 
 ```javascript
-// Same API as original dapp-utils
-XianWalletUtils.init();
-const info = await XianWalletUtils.requestWalletInfo();
-const balance = await XianWalletUtils.getBalance("currency");
+// Connect to wallet via HTTP API
+const response = await fetch('http://localhost:8545/api/v1/wallet/status');
+const status = await response.json();
+console.log('Wallet available:', status.available);
 ```
 
 ## API Reference
@@ -822,14 +822,16 @@ const balance = await client.getBalance('currency');
 ### Legacy Web DApp Example
 
 ```html
-<!-- For legacy JavaScript compatibility -->
+<!-- Direct HTTP API usage -->
 <script>
 // Works with any wallet type (desktop, web, CLI)
-XianWalletUtils.init().then(() => {
-    return XianWalletUtils.requestWalletInfo();
-}).then(info => {
-    console.log('Connected:', info.address);
-});
+fetch('http://localhost:8545/api/v1/wallet/status')
+    .then(response => response.json())
+    .then(status => {
+        if (status.available) {
+            console.log('Wallet available');
+        }
+    });
 </script>
 ```
 
@@ -981,12 +983,12 @@ const balance = await client.getBalance('currency');
 
 ### For Existing DApps
 
-**No changes required!** The protocol provides full backward compatibility:
+**Migration to HTTP API:** Use the standardized HTTP endpoints:
 
 ```javascript
-// Existing code works unchanged
-XianWalletUtils.init();
-const balance = await XianWalletUtils.getBalance("currency");
+// Updated code using HTTP API
+const response = await fetch('http://localhost:8545/api/v1/wallet/balance/currency');
+const balance = await response.json();
 ```
 
 ### Benefits of Migration

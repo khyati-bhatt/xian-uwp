@@ -249,24 +249,7 @@ class TestE2EAsyncSyncDemo:
         
         print("✅ CORS configuration demo completed successfully")
     
-    def test_legacy_compatibility_demo(self):
-        """Demonstrate legacy compatibility features"""
-        from xian_uwp.client import XianWalletUtils
-        
-        # Test legacy utils creation
-        utils = XianWalletUtils()
-        assert utils.client is None
-        
-        # Test that all legacy methods exist
-        legacy_methods = [
-            'init', 'requestWalletInfo', 'getBalance', 'getApprovedBalance',
-            'sendTransaction', 'signMessage', 'addToken'
-        ]
-        
-        for method in legacy_methods:
-            assert hasattr(utils, method), f"Missing legacy method: {method}"
-        
-        print("✅ Legacy compatibility demo completed successfully")
+
     
     @pytest.mark.asyncio
     async def test_comprehensive_integration_demo(self):

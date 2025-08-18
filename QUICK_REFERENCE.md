@@ -180,9 +180,9 @@ async def handle_events():
 ## 🌐 Legacy Compatibility
 
 ```javascript
-// Existing dapp-utils code works unchanged
-await XianWalletUtils.init();
-const balance = await XianWalletUtils.getBalance("currency");
+// Use HTTP API directly
+const response = await fetch('http://localhost:8545/api/v1/wallet/balance/currency');
+const balance = await response.json();
 ```
 
 ## ❌ Error Handling
@@ -204,7 +204,7 @@ client = XianWalletClientSync(
     app_url="http://localhost:3000"
 )
 try:
-    if client.connect(auto_approve=True):
+    if client.connect():
         info = client.get_wallet_info()
         print(f"Connected to {info.wallet_type} wallet")
         print(f"Address: {info.address}")

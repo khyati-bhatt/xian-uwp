@@ -42,13 +42,11 @@ class XianWalletClient:
         app_name: str,
         app_url: str = "https://localhost",
         server_url: str = f"http://{ProtocolConfig.DEFAULT_HOST}:{ProtocolConfig.DEFAULT_PORT}",
-        permissions: Optional[List[Permission]] = None,
-        wallet_url: str = None  # Alias for server_url for backwards compatibility
+        permissions: Optional[List[Permission]] = None
     ):
         self.app_name = app_name
         self.app_url = app_url
-        # Use wallet_url if provided, otherwise use server_url
-        self.server_url = (wallet_url or server_url).rstrip('/')
+        self.server_url = server_url.rstrip('/')
         self.permissions = permissions or [
             Permission.WALLET_INFO,
             Permission.BALANCE,
@@ -422,7 +420,7 @@ class XianWalletClient:
         
         try:
             self._reconnect_attempts += 1
-            await self.connect(auto_approve=True)
+            await self.connect()
             self._reconnect_attempts = 0
         except Exception:
             pass
@@ -550,63 +548,3 @@ def create_client(
         return XianWalletClientSync(app_name, app_url, **kwargs)
 
 
-# Legacy compatibility (matches original dapp-utils interface)
-class XianWalletUtils:
-    """Legacy compatibility class matching JavaScript dapp-utils API"""
-    
-    def __init__(self):
-        self.client: Optional[XianWalletClientSync] = None
-    
-    def init(self, _: str = None):
-        """Initialize (legacy compatibility)"""
-        self.client = XianWalletClientSync("Legacy DApp")
-        return self.client.connect(auto_approve=True)
-    
-    def requestWalletInfo(self) -> dict:
-        """Request wallet info (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        info = self.client.get_wallet_info()
-        return {
-            "address": info.address,
-            "truncatedAddress": info.truncated_address,
-            "locked": info.locked,
-            "chainId": info.chain_id
-        }
-    
-    def getBalance(self, contract: str = "currency") -> Union[float, int]:
-        """Get balance (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        return self.client.get_balance(contract)
-    
-    def getApprovedBalance(self, contract: str, spender: str) -> Union[float, int]:
-        """Get approved balance (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        return self.client.get_approved_balance(contract, spender)
-    
-    def sendTransaction(self, contract: str, function: str, kwargs: dict, stamps_supplied: int = None) -> dict:
-        """Send transaction (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        result = self.client.send_transaction(contract, function, kwargs, stamps_supplied)
-        return {
-            "result": result.result,
-            "errors": result.errors,
-            "hash": result.transaction_hash
-        }
-    
-    def signMessage(self, message: str) -> dict:
-        """Sign message (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        signature = self.client.sign_message(message)
-        return {"signature": signature}
-    
-    def addToken(self, contract_address: str) -> dict:
-        """Add token (legacy compatibility)"""
-        if not self.client:
-            raise WalletProtocolError("Not initialized")
-        accepted = self.client.add_token(contract_address)
-        return {"accepted": accepted}
