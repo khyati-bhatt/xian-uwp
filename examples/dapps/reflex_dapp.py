@@ -42,7 +42,7 @@ class WalletState(rx.State):
                 permissions=["wallet_info", "balance"]
             )
 
-            success = self._client.connect(auto_approve=True)  # Auto-approve for demo purposes
+            success = self._client.connect()  # Will wait for user approval
             if success:
                 info = self._client.get_wallet_info()
                 self.is_connected = True

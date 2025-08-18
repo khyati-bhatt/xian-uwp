@@ -78,12 +78,9 @@ class XianWalletClient:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
     
-    async def connect(self, auto_approve: bool = False) -> bool:
+    async def connect(self) -> bool:
         """
         Connect to wallet
-        
-        Args:
-            auto_approve: For testing - automatically approve requests
             
         Returns:
             True if connected successfully
@@ -96,7 +93,7 @@ class XianWalletClient:
                 raise WalletProtocolError("Wallet server not available", ErrorCodes.WALLET_NOT_FOUND)
             
             # Request authorization
-            session_token = await self._request_authorization(auto_approve)
+            session_token = await self._request_authorization()
             
             if session_token:
                 self.session_token = session_token
@@ -249,11 +246,47 @@ class XianWalletClient:
             session_token = await self._request_authorization()
             return {"session_token": session_token, "status": "approved" if session_token else "denied"}
     
-    async def wait_for_authorization(self, _: str = None) -> dict:
-        """Wait for authorization to be approved/denied"""
-        # For now, simulate immediate approval for testing
-        # In a real implementation, this would poll the auth status
-        return {"status": "approved", "session_token": "mock_session_token"}
+    async def wait_for_authorization(self, request_id: str, timeout: int = 300) -> dict:
+        """
+        Wait for authorization to be approved/denied
+        
+        Args:
+            request_id: The authorization request ID to wait for
+            timeout: Maximum time to wait in seconds (default: 5 minutes)
+            
+        Returns:
+            Dictionary with status and session_token if approved
+        """
+        start_time = asyncio.get_event_loop().time()
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            try:
+                # Check authorization status
+                status_endpoint = Endpoints.AUTH_STATUS.replace("{request_id}", request_id)
+                response = await self.http_client.get(f"{self.server_url}{status_endpoint}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    status = result.get("status")
+                    
+                    if status == "approved":
+                        return {
+                            "status": "approved", 
+                            "session_token": result.get("session_token")
+                        }
+                    elif status == "denied":
+                        return {"status": "denied", "session_token": None}
+                    # If status is "pending", continue polling
+                
+                # Wait before next poll
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                logger.warning(f"Error checking authorization status: {e}")
+                await asyncio.sleep(2)
+        
+        # Timeout reached
+        return {"status": "timeout", "session_token": None}
     
     # Private methods
     async def _check_wallet_available(self) -> bool:
@@ -267,8 +300,8 @@ class XianWalletClient:
         except:
             return False
     
-    async def _request_authorization(self, auto_approve: bool = False) -> Optional[str]:
-        """Request authorization from wallet"""
+    async def _request_authorization(self) -> Optional[str]:
+        """Request authorization from wallet and wait for user approval"""
         auth_request = AuthorizationRequest(
             app_name=self.app_name,
             app_url=self.app_url,
@@ -288,30 +321,17 @@ class XianWalletClient:
         result = response.json()
         request_id = result["request_id"]
         
-        if auto_approve:
-            # Auto-approve for testing
-            await asyncio.sleep(1)
-            approve_endpoint = Endpoints.AUTH_APPROVE.replace("{request_id}", request_id)
-            approve_response = await self.http_client.post(f"{self.server_url}{approve_endpoint}")
-            
-            if approve_response.status_code == 200:
-                auth_result = AuthorizationResponse(**approve_response.json())
-                return auth_result.session_token
-        else:
-            # Wait for user approval (in production, this would be via WebSocket notification)
-            logger.info(f"⏳ Waiting for authorization approval for {self.app_name}")
-            
-            # Poll for approval (simplified for demo)
-            for _ in range(30):  # Wait up to 30 seconds
-                await asyncio.sleep(1)
-                approve_endpoint = Endpoints.AUTH_APPROVE.replace("{request_id}", request_id)
-                try:
-                    approve_response = await self.http_client.post(f"{self.server_url}{approve_endpoint}")
-                    if approve_response.status_code == 200:
-                        auth_result = AuthorizationResponse(**approve_response.json())
-                        return auth_result.session_token
-                except:
-                    continue
+        logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
+        
+        # Wait for user approval using the proper polling method
+        auth_result = await self.wait_for_authorization(request_id, timeout=300)
+        
+        if auth_result["status"] == "approved":
+            return auth_result["session_token"]
+        elif auth_result["status"] == "denied":
+            raise WalletProtocolError("Authorization denied by user")
+        elif auth_result["status"] == "timeout":
+            raise WalletProtocolError("Authorization request timed out")
         
         return None
     
@@ -437,9 +457,9 @@ class XianWalletClientSync:
         """Wait for authorization to be approved/denied"""
         return self._run_async(self.client.wait_for_authorization(request_id))
     
-    def connect(self, auto_approve: bool = False) -> bool:
+    def connect(self) -> bool:
         """Connect to wallet"""
-        return self._run_async(self.client.connect(auto_approve))
+        return self._run_async(self.client.connect())
     
     def disconnect(self):
         """Disconnect from wallet"""

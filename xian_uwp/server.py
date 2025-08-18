@@ -44,13 +44,14 @@ class WalletProtocolServer:
         wallet_type: WalletType = WalletType.DESKTOP,
         cors_config: Optional[CORSConfig] = None,
         network_url: Optional[str] = None,
-        chain_id: Optional[str] = None
+        chain_id: Optional[str] = None,
+        wallet: Optional[Wallet] = None
     ):
         self.wallet_type = wallet_type
         self.uvicorn_server = None
         self.server_task = None
         self.is_running = False
-        self.wallet: Optional[Wallet] = None
+        self.wallet = wallet
         self.xian_client: Optional[Xian] = None
         self.is_locked = True
         self.password_hash: Optional[str] = None
@@ -94,8 +95,10 @@ class WalletProtocolServer:
         @asynccontextmanager
         async def lifespan(_: FastAPI):
             logger.info("🚀 Xian Wallet Protocol Server starting...")
-            # Initialize demo wallet
-            await self._initialize_demo_wallet()
+            # Initialize network client if wallet and network are configured
+            if self.wallet and self.network_url:
+                self.xian_client = Xian(self.network_url, wallet=self.wallet)
+                logger.info(f"📍 Wallet initialized: {self.wallet.public_key}")
             # Start background tasks
             cleanup_task = asyncio.create_task(self._cleanup_task())
             self.background_tasks.add(cleanup_task)
@@ -356,11 +359,10 @@ class WalletProtocolServer:
                 return cached_data
             
             try:
-                if self.xian_client:
-                    balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
-                else:
-                    # Return demo balance when no blockchain client is configured
-                    balance = 100.0
+                if not self.xian_client:
+                    raise HTTPException(status_code=503, detail="Network client not configured")
+                
+                balance = self.xian_client.get_balance(self.wallet.public_key, contract=contract)
                 response = BalanceResponse(balance=balance, contract=contract)
                 self._set_cache(cache_key, response)
                 return response
@@ -537,18 +539,34 @@ class WalletProtocolServer:
             current_task = asyncio.current_task()
             self.background_tasks.discard(current_task)
     
-    # Initialization
-    async def _initialize_demo_wallet(self):
-        """Initialize demo wallet for development"""
-        try:
-            self.wallet = Wallet()
-            # Only initialize xian_client if network is configured
-            if self.network_url:
-                self.xian_client = Xian(self.network_url, wallet=self.wallet)
-            self.password_hash = hashlib.sha256("demo_password".encode()).hexdigest()
-            logger.info(f"📍 Demo wallet initialized: {self.wallet.public_key}")
-        except Exception as e:
-            logger.error(f"Failed to initialize wallet: {e}")
+    # Wallet management
+    def set_wallet(self, wallet: Wallet, password_hash: Optional[str] = None):
+        """Set the wallet instance and optional password hash"""
+        self.wallet = wallet
+        if password_hash:
+            self.password_hash = password_hash
+        
+        # Initialize network client if network is configured
+        if self.network_url:
+            self.xian_client = Xian(self.network_url, wallet=self.wallet)
+            logger.info(f"📍 Wallet configured: {self.wallet.public_key}")
+    
+    def lock_wallet(self):
+        """Lock the wallet"""
+        self.is_locked = True
+        logger.info("🔒 Wallet locked")
+    
+    def unlock_wallet(self, password: str) -> bool:
+        """Unlock the wallet with password"""
+        if not self.password_hash:
+            raise HTTPException(status_code=400, detail="No password set for wallet")
+        
+        provided_hash = hashlib.sha256(password.encode()).hexdigest()
+        if provided_hash == self.password_hash:
+            self.is_locked = False
+            logger.info("🔓 Wallet unlocked")
+            return True
+        return False
     
     def run(
         self, 

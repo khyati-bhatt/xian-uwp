@@ -60,7 +60,7 @@ class WebDAppState(rx.State):
             )
             
             # Attempt connection
-            success = self._client.connect(auto_approve=False)
+            success = self._client.connect()
             
             if success:
                 # Get wallet info
