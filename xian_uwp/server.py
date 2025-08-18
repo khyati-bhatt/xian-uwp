@@ -367,9 +367,8 @@ class WalletProtocolServer:
         @app.get(Endpoints.BALANCE.replace("{contract}", "{contract}"), response_model=BalanceResponse)
         async def get_balance(contract: str, _: Session = Depends(require_permission(Permission.BALANCE))):
             """Get token balance"""
-            # Balance should be available even when locked - only check wallet exists
-            if not self.wallet:
-                raise HTTPException(status_code=404, detail=ErrorCodes.WALLET_NOT_FOUND)
+            # Balance contains sensitive financial information - require unlocked wallet
+            check_wallet_unlocked()
             
             cache_key = f"balance_{contract}_{self.wallet.public_key}"
             cached_data = self._get_cached(cache_key, ttl_seconds=10)

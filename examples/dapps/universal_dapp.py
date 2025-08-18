@@ -54,10 +54,18 @@ class UniversalDApp:
         """Refresh balance from wallet"""
         if self.is_connected and self.client:
             try:
+                # Refresh wallet info first to get current lock status
+                self.wallet_info = self.client.get_wallet_info()
+                # Then try to get balance (will fail if wallet is locked)
                 self.balance = self.client.get_balance("currency")
                 return True
             except Exception as e:
                 print(f"Error refreshing balance: {e}")
+                # Still update wallet info even if balance fails (e.g., if locked)
+                try:
+                    self.wallet_info = self.client.get_wallet_info()
+                except:
+                    pass
                 return False
         return False
 
@@ -177,16 +185,20 @@ def main(page: ft.Page):
     def refresh_balance_click():
         """Refresh balance from wallet"""
         if dapp.refresh_balance():
-            # Update balance display
+            # Update both balance and lock status display
             if wallet_details.visible and wallet_details.content:
                 wallet_details.content.controls[4].value = f"Balance: {dapp.balance} XIAN"
+                wallet_details.content.controls[5].value = f"Locked: {'Yes' if dapp.wallet_info.locked else 'No'}"
             results_text.value = f"✅ Balance refreshed: {dapp.balance} XIAN"
             results_text.color = ft.Colors.GREEN_700
             show_notification("Balance refreshed!")
         else:
-            results_text.value = "❌ Failed to refresh balance"
+            # Update lock status even if balance refresh failed
+            if wallet_details.visible and wallet_details.content and dapp.wallet_info:
+                wallet_details.content.controls[5].value = f"Locked: {'Yes' if dapp.wallet_info.locked else 'No'}"
+            results_text.value = "❌ Failed to refresh balance (wallet may be locked)"
             results_text.color = ft.Colors.RED_700
-            show_notification("Failed to refresh balance", error=True)
+            show_notification("Failed to refresh balance - check if wallet is unlocked", error=True)
         
         page.update()
 
