@@ -140,7 +140,8 @@ def start(password, port, background):
             # In real implementation, you'd properly daemonize
             click.echo("Running in background mode...")
 
-        server.run(host="127.0.0.1", port=port)
+        # Use robust startup that handles port conflicts
+        server.run_robust(host="127.0.0.1", port=port, max_retries=3)
     except KeyboardInterrupt:
         click.echo("\n🛑 Shutting down wallet daemon...")
     except Exception as e:

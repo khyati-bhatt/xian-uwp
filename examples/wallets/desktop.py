@@ -32,7 +32,8 @@ class DesktopWallet:
                 import asyncio
                 
                 async def start_server_async():
-                    await self.server.start_async(host="127.0.0.1", port=8545)
+                    # Use robust startup that handles port conflicts
+                    await self.server.start_async_robust(host="127.0.0.1", port=8545, max_retries=3)
                     # Keep the thread alive while server is running
                     while self.server.is_running:
                         await asyncio.sleep(0.1)
