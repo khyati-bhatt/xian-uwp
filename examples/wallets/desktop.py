@@ -6,8 +6,17 @@
 # Or install development version: pip install -e .
 
 import threading
+import asyncio
+import json
+import httpx
+import websockets
+import logging
 
 import flet as ft
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from xian_uwp.server import WalletProtocolServer
 from xian_uwp.models import WalletType
@@ -18,19 +27,35 @@ class DesktopWallet:
         self.server = None
         self.server_thread = None
         self.wallet_address = "Not initialized"
-        self.is_locked = True
+        self.is_locked = False  # Start unlocked for testing
         self.balance = 100.0  # Set demo balance from start for consistency
+        self.ws_thread = None
+        self.pending_auth_requests = {}
+        self.auth_callback = None  # Callback to update UI when auth request arrives
 
     def start_server(self):
         """Start the protocol server in background thread"""
         try:
+            logger.info("Starting protocol server...")
             # Create a demo wallet for the server
             from xian_py.wallet import Wallet
             demo_wallet = Wallet()  # Creates a new wallet with random keys
             self.wallet_address = demo_wallet.public_key
+            logger.info(f"Created demo wallet with address: {self.wallet_address[:10]}...")
             
-            self.server = WalletProtocolServer(wallet_type=WalletType.DESKTOP, wallet=demo_wallet)
+            # Create CORS config that includes our test ports
+            from xian_uwp.models import CORSConfig
+            cors_config = CORSConfig.localhost_dev(ports=[3000, 3001, 5000, 5173, 8000, 8080, 8081, 51644, 57158, 59003, 50879])
+            
+            self.server = WalletProtocolServer(
+                wallet_type=WalletType.DESKTOP, 
+                wallet=demo_wallet,
+                cors_config=cors_config
+            )
             self.server.is_locked = self.is_locked
+            # Configure network (using testnet as example)
+            self.server.configure_network("https://testnet.xian.org", "xian-testnet-1")
+            logger.info("Protocol server instance created")
 
             # Run server in background thread using async approach
             def run_server():
@@ -44,7 +69,7 @@ class DesktopWallet:
                         while self.server.is_running:
                             await asyncio.sleep(0.1)
                     except Exception as e:
-                        print(f"Protocol server failed to start: {e}")
+                        logger.error(f"Protocol server failed to start: {e}")
                         import traceback
                         traceback.print_exc()
                 
@@ -54,7 +79,7 @@ class DesktopWallet:
                 try:
                     loop.run_until_complete(start_server_async())
                 except Exception as e:
-                    print(f"Server thread error: {e}")
+                    logger.error(f"Server thread error: {e}")
                 finally:
                     # Clean shutdown of remaining tasks
                     try:
@@ -86,6 +111,10 @@ class DesktopWallet:
                 time.sleep(0.5)
             
             self.update_wallet_info()
+            
+            # Start WebSocket listener for auth requests
+            self.start_websocket_listener()
+            
         except Exception as e:
             print(f"Failed to start server: {e}")
             # Set some demo data so the wallet still works
@@ -109,6 +138,44 @@ class DesktopWallet:
     def is_server_running(self):
         """Check if server is currently running"""
         return self.server and self.server.is_server_running()
+    
+    def start_websocket_listener(self):
+        """Start WebSocket listener for authorization requests"""
+        async def listen_for_auth_requests():
+            try:
+                async with websockets.connect("ws://localhost:8545/ws/v1") as websocket:
+                    print("✅ Connected to wallet WebSocket for auth requests")
+                    while True:
+                        message = await websocket.recv()
+                        data = json.loads(message)
+                        
+                        if data.get("type") == "authorization_request":
+                            request = data.get("request", {})
+                            request_id = request.get("request_id")
+                            if request_id:
+                                self.pending_auth_requests[request_id] = request
+                                print(f"📥 Received auth request from {request.get('app_name')}")
+                                
+                                # Notify UI if callback is set
+                                if self.auth_callback:
+                                    self.auth_callback(request)
+            except Exception as e:
+                print(f"WebSocket listener error: {e}")
+        
+        def run_ws_listener():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(listen_for_auth_requests())
+            except Exception as e:
+                print(f"WebSocket thread error: {e}")
+            finally:
+                loop.close()
+        
+        self.ws_thread = threading.Thread(target=run_ws_listener, daemon=True)
+        self.ws_thread.start()
+    
+
 
 
 def main(page: ft.Page):
@@ -125,10 +192,10 @@ def main(page: ft.Page):
     auto_start_success = False
     try:
         wallet.start_server()
-        print("✅ Protocol server auto-started successfully!")
+        logger.info("✅ Protocol server auto-started successfully!")
         auto_start_success = True
     except Exception as e:
-        print(f"❌ Failed to auto-start protocol server: {e}")
+        logger.error(f"❌ Failed to auto-start protocol server: {e}")
 
     # UI State
     password_field = ft.TextField(
@@ -273,6 +340,105 @@ def main(page: ft.Page):
         visible=False
     )
     
+    # Authorization request UI
+    auth_requests_column = ft.Column([], spacing=10)
+    
+    def handle_auth_request(request):
+        """Handle incoming authorization request"""
+        request_id = request.get("request_id")
+        app_name = request.get("app_name", "Unknown App")
+        permissions = request.get("permissions", [])
+        
+        # Create UI for this request
+        request_card = ft.Card(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text(f"Authorization Request", size=16, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"App: {app_name}", size=14),
+                    ft.Text(f"Permissions: {', '.join(permissions)}", size=12),
+                    ft.Row([
+                        ft.ElevatedButton(
+                            "Approve",
+                            bgcolor=ft.Colors.GREEN_400,
+                            color=ft.Colors.WHITE,
+                            on_click=lambda _: approve_request(request_id)
+                        ),
+                        ft.ElevatedButton(
+                            "Reject",
+                            bgcolor=ft.Colors.RED_400,
+                            color=ft.Colors.WHITE,
+                            on_click=lambda _: reject_request(request_id)
+                        )
+                    ], alignment=ft.MainAxisAlignment.CENTER)
+                ], spacing=10),
+                padding=15
+            ),
+            key=request_id
+        )
+        
+        # Add to UI
+        auth_requests_column.controls.append(request_card)
+        page.update()
+    
+    def approve_request(request_id):
+        """Approve an authorization request"""
+        def do_approve():
+            try:
+                # Use sync HTTP client
+                import requests
+                response = requests.post(f"http://localhost:8545/api/v1/auth/approve/{request_id}")
+                if response.status_code == 200:
+                    # Remove from UI
+                    for i, control in enumerate(auth_requests_column.controls):
+                        if control.key == request_id:
+                            auth_requests_column.controls.pop(i)
+                            break
+                    del wallet.pending_auth_requests[request_id]
+                    page.update()
+                    show_success("Authorization approved!")
+                else:
+                    show_error("Failed to approve authorization")
+            except Exception as e:
+                show_error(f"Error approving: {str(e)}")
+        
+        # Run in thread to avoid blocking UI
+        threading.Thread(target=do_approve, daemon=True).start()
+    
+    def reject_request(request_id):
+        """Reject an authorization request"""
+        def do_reject():
+            try:
+                # Use sync HTTP client
+                import requests
+                response = requests.post(f"http://localhost:8545/api/v1/auth/reject/{request_id}")
+                if response.status_code == 200:
+                    # Remove from UI
+                    for i, control in enumerate(auth_requests_column.controls):
+                        if control.key == request_id:
+                            auth_requests_column.controls.pop(i)
+                            break
+                    del wallet.pending_auth_requests[request_id]
+                    page.update()
+                    show_error("Authorization rejected")
+                else:
+                    show_error("Failed to reject authorization")
+            except Exception as e:
+                show_error(f"Error rejecting: {str(e)}")
+        
+        # Run in thread to avoid blocking UI
+        threading.Thread(target=do_reject, daemon=True).start()
+    
+    def show_success(message):
+        page.snack_bar = ft.SnackBar(
+            content=ft.Text(message),
+            bgcolor=ft.Colors.GREEN_400
+        )
+        page.snack_bar.open = True
+        page.update()
+    
+    # Set the callback for auth requests
+    wallet.auth_callback = handle_auth_request
+    
     # Update UI based on auto-start result
     if auto_start_success:
         server_status.value = "Server: Running on localhost:8545"
@@ -315,6 +481,9 @@ def main(page: ft.Page):
                     ft.Container(height=30),
                     server_status,
                     ft.Row([start_server_btn, stop_server_btn], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Container(height=30),
+                    ft.Text("Authorization Requests", size=18, weight=ft.FontWeight.BOLD),
+                    auth_requests_column,
                 ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=10),
@@ -325,6 +494,6 @@ def main(page: ft.Page):
     )
 
 
-# Compatible with older Flet versions: Use ft.app instead of ft.run
+# Run as desktop app
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main, view=ft.AppView.FLET_APP)

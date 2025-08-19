@@ -257,12 +257,8 @@ class XianWalletClient:
         """
         logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
         
-        # Try WebSocket first, fallback to polling if WebSocket fails
-        try:
-            return await self._wait_for_authorization_websocket(request_id, timeout)
-        except Exception as e:
-            logger.warning(f"WebSocket authorization failed, falling back to polling: {e}")
-            return await self._wait_for_authorization_polling(request_id, timeout)
+        # Use WebSocket only - no polling fallback
+        return await self._wait_for_authorization_websocket(request_id, timeout)
     
     async def _wait_for_authorization_websocket(self, request_id: str, timeout: int) -> dict:
         """Wait for authorization using WebSocket"""
@@ -298,38 +294,7 @@ class XianWalletClient:
         except Exception as e:
             raise e
     
-    async def _wait_for_authorization_polling(self, request_id: str, timeout: int) -> dict:
-        """Fallback polling method for authorization"""
-        start_time = asyncio.get_event_loop().time()
-        
-        while (asyncio.get_event_loop().time() - start_time) < timeout:
-            try:
-                # Check authorization status
-                status_endpoint = Endpoints.AUTH_STATUS.replace("{request_id}", request_id)
-                response = await self.http_client.get(f"{self.server_url}{status_endpoint}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    status = result.get("status")
-                    
-                    if status == "approved":
-                        return {
-                            "status": "approved", 
-                            "session_token": result.get("session_token")
-                        }
-                    elif status == "denied":
-                        return {"status": "denied", "session_token": None}
-                    # If status is "pending", continue polling
-                
-                # Wait before next poll
-                await asyncio.sleep(1)
-                
-            except Exception as e:
-                logger.warning(f"Error checking authorization status: {e}")
-                await asyncio.sleep(2)
-        
-        # Timeout reached
-        return {"status": "timeout", "session_token": None}
+
     
     # Private methods
     async def _check_wallet_available(self) -> bool:
@@ -366,7 +331,7 @@ class XianWalletClient:
         
         logger.info(f"⏳ Waiting for authorization approval for {self.app_name} (request: {request_id})")
         
-        # Wait for user approval using the proper polling method
+        # Wait for user approval using WebSocket
         auth_result = await self.wait_for_authorization(request_id, timeout=300)
         
         if auth_result["status"] == "approved":
