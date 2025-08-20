@@ -5,7 +5,7 @@ Universal data models for all wallet implementations
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 from enum import Enum
@@ -152,6 +152,10 @@ class AuthorizationResponse(BaseModel):
     expires_at: datetime
     permissions: List[Permission]
     status: str = "approved"
+    
+    @field_serializer('expires_at')
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
 
 
 class ErrorResponse(BaseModel):
@@ -182,6 +186,10 @@ class Session(BaseModel):
     expires_at: datetime
     last_activity: datetime
     request_id: Optional[str] = None
+    
+    @field_serializer('created_at', 'expires_at', 'last_activity')
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
 
 
 class PendingRequest(BaseModel):
@@ -193,6 +201,10 @@ class PendingRequest(BaseModel):
     description: Optional[str]
     created_at: datetime
     status: str = "pending"
+    
+    @field_serializer('created_at')
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
 
 
 # CORS Configuration

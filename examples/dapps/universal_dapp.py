@@ -272,6 +272,6 @@ def main(page: ft.Page):
     )
 
 
-# Updated for Flet 0.28.3: Use ft.run
+# Run as desktop app
 if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
+    ft.app(target=main, view=ft.AppView.FLET_APP)
