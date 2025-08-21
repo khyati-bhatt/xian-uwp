@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, Set, Tuple
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -78,6 +78,9 @@ class WalletProtocolServer:
         # Cache and activity tracking
         self.cache: Dict[str, tuple] = {}  # (data, timestamp)
         self.last_activity = datetime.now()
+        
+        # Rate limiting for unlock attempts
+        self.unlock_attempts: Dict[str, Dict[str, Any]] = {}  # ip -> {attempts, last_attempt, locked_until}
         
         # Background task management
         self.background_tasks: Set[asyncio.Task] = set()
@@ -346,14 +349,58 @@ class WalletProtocolServer:
             return wallet_info
         
         @app.post(Endpoints.WALLET_UNLOCK)
-        async def unlock_wallet(request: UnlockRequest):
-            """Unlock wallet"""
+        async def unlock_wallet(request: UnlockRequest, req: Request):
+            """Unlock wallet with rate limiting"""
             if not self.password_hash:
                 raise HTTPException(status_code=400, detail="No password set")
             
+            # Get client IP
+            client_ip = req.client.host if req.client else "unknown"
+            
+            # Check rate limiting
+            now = datetime.now()
+            if client_ip in self.unlock_attempts:
+                attempt_info = self.unlock_attempts[client_ip]
+                
+                # Check if account is locked
+                if attempt_info.get("locked_until") and now < attempt_info["locked_until"]:
+                    remaining_seconds = int((attempt_info["locked_until"] - now).total_seconds())
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"{ErrorCodes.ACCOUNT_LOCKED}: Too many failed attempts. Try again in {remaining_seconds} seconds."
+                    )
+                
+                # Check if we need to enforce delay between attempts
+                if attempt_info.get("last_attempt"):
+                    time_since_last = (now - attempt_info["last_attempt"]).total_seconds()
+                    required_delay = min(2 ** (attempt_info.get("attempts", 0) - 1), 60)  # Exponential backoff, max 60s
+                    
+                    if time_since_last < required_delay:
+                        raise HTTPException(
+                            status_code=429,
+                            detail=f"{ErrorCodes.TOO_MANY_ATTEMPTS}: Please wait {int(required_delay - time_since_last)} seconds before trying again."
+                        )
+            
+            # Verify password
             password_hash = hashlib.sha256(request.password.encode()).hexdigest()
             if password_hash != self.password_hash:
+                # Track failed attempt
+                if client_ip not in self.unlock_attempts:
+                    self.unlock_attempts[client_ip] = {"attempts": 0, "last_attempt": None, "locked_until": None}
+                
+                self.unlock_attempts[client_ip]["attempts"] += 1
+                self.unlock_attempts[client_ip]["last_attempt"] = now
+                
+                # Lock account after 5 failed attempts
+                if self.unlock_attempts[client_ip]["attempts"] >= 5:
+                    self.unlock_attempts[client_ip]["locked_until"] = now + timedelta(minutes=15)
+                    logger.warning(f"Account locked for IP {client_ip} after 5 failed unlock attempts")
+                
                 raise HTTPException(status_code=401, detail="Invalid password")
+            
+            # Successful unlock - clear rate limiting for this IP
+            if client_ip in self.unlock_attempts:
+                del self.unlock_attempts[client_ip]
             
             self.is_locked = False
             self.last_activity = datetime.now()
@@ -532,6 +579,23 @@ class WalletProtocolServer:
         for key in keys_to_delete:
             del self.cache[key]
     
+    def _cleanup_rate_limits(self):
+        """Clean up expired rate limit entries"""
+        now = datetime.now()
+        ips_to_remove = []
+        
+        for ip, info in self.unlock_attempts.items():
+            # Remove entries that haven't been used for 30 minutes
+            if info.get("last_attempt"):
+                if (now - info["last_attempt"]).total_seconds() > 1800:  # 30 minutes
+                    ips_to_remove.append(ip)
+            # Remove entries where lock has expired
+            elif info.get("locked_until") and now > info["locked_until"]:
+                ips_to_remove.append(ip)
+        
+        for ip in ips_to_remove:
+            del self.unlock_attempts[ip]
+    
     # WebSocket helpers
     async def _broadcast_to_wallet(self, message: dict):
         """Broadcast message to wallet UI and subscribed clients"""
@@ -585,6 +649,9 @@ class WalletProtocolServer:
                 ]
                 for req_id in expired_requests:
                     del self.pending_requests[req_id]
+                
+                # Clean up expired rate limits
+                self._cleanup_rate_limits()
                 
                 # Auto-lock on inactivity
                 if not self.is_locked and self.last_activity:
