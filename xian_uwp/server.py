@@ -198,6 +198,13 @@ class WalletProtocolServer:
         @app.post(Endpoints.AUTH_REQUEST)
         async def request_authorization(request: AuthorizationRequest):
             """Request DApp authorization"""
+            # Enforce MAX_SESSIONS limit on pending requests
+            if len(self.pending_requests) >= ProtocolConfig.MAX_SESSIONS:
+                raise HTTPException(
+                    status_code=429, 
+                    detail=ErrorCodes.MAX_SESSIONS_EXCEEDED
+                )
+            
             request_id = secrets.token_urlsafe(16)
             
             pending_request = PendingRequest(
