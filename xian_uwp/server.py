@@ -9,10 +9,9 @@ import json
 import secrets
 import logging
 import uvicorn
-import socket
 
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any, Set, Tuple
+from typing import Dict, Optional, Any, Set
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, Request
@@ -30,8 +29,9 @@ from .models import (
     AuthorizationResponse, StatusResponse,
     Session, PendingRequest
 )
+
 from .client import WalletProtocolError
-from .server_utils import RobustServerManager, ensure_port_available
+from .server_utils import RobustServerManager
 
 
 # Configure logging

@@ -510,5 +510,3 @@ def create_client(
         return XianWalletClient(app_name, app_url, **kwargs)
     else:
         return XianWalletClientSync(app_name, app_url, **kwargs)
-
-
